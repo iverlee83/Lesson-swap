@@ -3,238 +3,592 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>St. Hilary's Lesson Swap</title>
+<title>St. Hilary's School · Lesson Swap</title>
 <script src="https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.js"></script>
 <style>
-  :root{--navy:#1e3a5f;--gold:#c9a227;--bg:#f4f6f9;--card:#fff;--line:#dde3ea;--ok:#1a7f4e;--warn:#9a6b00;--err:#b3261e;}
+  :root{
+    --navy:#12314f; --navy-2:#1e4a75; --gold:#c9a227; --gold-soft:#f5e9c4;
+    --bg:#eef2f7; --card:#fff; --ink:#1b2430; --muted:#65748a;
+    --line:#dbe3ec; --ok:#16794f; --ok-bg:#e9f6f0;
+    --warn:#8a6100; --warn-bg:#fff6e0; --err:#a52820; --err-bg:#fdeceb;
+    --shadow:0 1px 2px rgba(18,49,79,.06),0 8px 24px rgba(18,49,79,.07);
+  }
   *{box-sizing:border-box;margin:0;padding:0;}
-  body{font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;background:var(--bg);color:#222;padding:24px;}
-  .wrap{max-width:1280px;margin:0 auto;}
-  header{background:var(--navy);color:#fff;border-radius:12px;padding:20px 28px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
-  header h1{font-size:22px;font-weight:700;}
-  header h1 span{color:var(--gold);}
-  #engineStatus{font-size:13px;opacity:.9;}
-  h2{font-size:15px;color:var(--navy);margin-bottom:12px;text-transform:uppercase;letter-spacing:.06em;}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:20px;}
-  .files{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;}
-  .fslot{border:1px dashed #b9c4d0;border-radius:10px;padding:14px;}
-  .fslot.loaded{border-style:solid;border-color:var(--ok);background:#f2faf6;}
-  .fslot h3{font-size:14px;margin-bottom:2px;}
-  .fslot .req{font-size:11px;color:#777;}
-  .fslot .meta{font-size:12px;color:#444;margin:8px 0;min-height:30px;word-break:break-all;}
-  .fslot .meta .none{color:#999;font-style:italic;}
-  .btn{display:inline-block;border:none;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;font-weight:600;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+       background:var(--bg);color:var(--ink);padding:22px 18px 40px;line-height:1.45;
+       -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1340px;margin:0 auto;}
+
+  header{background:linear-gradient(135deg,var(--navy),var(--navy-2));color:#fff;
+         border-radius:14px;padding:20px 26px;margin-bottom:18px;display:flex;
+         justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;
+         box-shadow:var(--shadow);}
+  header h1{font-size:20px;font-weight:700;letter-spacing:-.01em;}
+  header h1 span{color:var(--gold);font-weight:600;}
+  header .sub{font-size:12px;opacity:.75;margin-top:2px;}
+  #engineStatus{font-size:12px;background:rgba(255,255,255,.12);padding:5px 12px;
+                border-radius:99px;white-space:nowrap;}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+        padding:20px 22px;margin-bottom:18px;box-shadow:var(--shadow);}
+  h2{font-size:12px;color:var(--muted);margin-bottom:14px;text-transform:uppercase;
+     letter-spacing:.09em;font-weight:700;}
+  h2 .n{display:inline-flex;width:19px;height:19px;border-radius:5px;background:var(--navy);
+        color:#fff;align-items:center;justify-content:center;font-size:11px;margin-right:7px;
+        vertical-align:-3px;}
+
+  .files{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:13px;}
+  .fslot{border:1.5px dashed #c2cddb;border-radius:11px;padding:14px 15px;transition:.15s;}
+  .fslot.loaded{border-style:solid;border-color:#9fd3ba;background:var(--ok-bg);}
+  .fslot h3{font-size:13.5px;font-weight:700;}
+  .fslot .req{font-size:11px;color:var(--muted);margin-top:1px;}
+  .fslot .meta{font-size:11.5px;color:#3c4a5c;margin:9px 0 10px;min-height:32px;word-break:break-word;}
+  .fslot .meta .none{color:#9aa7b8;font-style:italic;}
+
+  .btn{border:none;border-radius:8px;padding:7px 14px;font-size:12.5px;cursor:pointer;
+       font-weight:600;font-family:inherit;transition:.12s;}
+  .btn:hover{filter:brightness(1.07);}
   .btn-up{background:var(--navy);color:#fff;}
-  .btn-del{background:#fff;color:var(--err);border:1px solid var(--err);margin-left:6px;}
-  .btn-run{background:var(--gold);color:#1e2a38;font-size:15px;padding:11px 28px;border-radius:10px;}
-  .btn:disabled{opacity:.45;cursor:not-allowed;}
+  .btn-del{background:#fff;color:var(--err);border:1px solid #e6b4b0;margin-left:6px;}
+  .btn-run{background:var(--gold);color:#2a1f00;font-size:14.5px;padding:11px 30px;border-radius:10px;
+           box-shadow:0 2px 8px rgba(201,162,39,.35);}
+  .btn-ghost{background:#f2f5f9;color:var(--navy);border:1px solid var(--line);}
+  .btn:disabled{opacity:.4;cursor:not-allowed;filter:none;}
+
   .form-row{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;}
-  .field label{display:block;font-size:12px;font-weight:600;color:#555;margin-bottom:5px;}
-  .field input{border:1px solid #b9c4d0;border-radius:8px;padding:9px 12px;font-size:14px;min-width:230px;}
-  .hint{font-size:12px;color:#888;margin-top:10px;}
-  .banner{border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:12px;}
-  .banner.warn{background:#fff7e0;border:1px solid #e6cc7a;color:var(--warn);}
-  .banner.err{background:#fdecea;border:1px solid #f1b0ab;color:var(--err);}
-  .tcard{margin-bottom:22px;}
-  .tcard h3{font-size:16px;color:var(--navy);margin-bottom:8px;}
-  .tcard h3 .pill{font-size:11px;background:var(--navy);color:#fff;border-radius:99px;padding:2px 10px;margin-left:8px;vertical-align:middle;}
-  table{width:100%;border-collapse:collapse;font-size:12.5px;}
-  th{background:var(--navy);color:#fff;padding:7px 8px;text-align:left;white-space:nowrap;}
-  td{border-bottom:1px solid var(--line);padding:7px 8px;vertical-align:top;}
-  tr:nth-child(even) td{background:#f8fafc;}
+  .field label{display:block;font-size:11.5px;font-weight:700;color:var(--muted);
+               margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em;}
+  .field input{border:1px solid #c2cddb;border-radius:8px;padding:9px 12px;font-size:14px;
+               min-width:240px;font-family:inherit;background:#fff;}
+  .field input:focus{outline:2px solid var(--gold);outline-offset:1px;border-color:var(--gold);}
+  .hint{font-size:11.5px;color:var(--muted);margin-top:11px;}
+
+  .banner{border-radius:9px;padding:10px 14px;font-size:12.5px;margin-bottom:11px;
+          border:1px solid;}
+  .banner.warn{background:var(--warn-bg);border-color:#e8d09a;color:var(--warn);}
+  .banner.err{background:var(--err-bg);border-color:#efb8b3;color:var(--err);}
+  .banner.ok{background:var(--ok-bg);border-color:#a9dcc4;color:var(--ok);}
+
+  .tcard{margin-bottom:26px;}
+  .tcard:last-of-type{margin-bottom:14px;}
+  .tcard h3{font-size:17px;color:var(--navy);margin-bottom:9px;display:flex;
+            align-items:center;gap:9px;flex-wrap:wrap;}
+  .pill{font-size:10.5px;background:#eaeff5;color:var(--navy);border-radius:99px;
+        padding:3px 10px;font-weight:700;letter-spacing:.03em;}
+  .pill.gold{background:var(--gold-soft);color:#7a5f00;}
+  .pill.red{background:var(--err-bg);color:var(--err);}
+
+  .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;}
+  table{width:100%;border-collapse:collapse;font-size:12px;}
+  th{background:var(--navy);color:#fff;padding:8px 9px;text-align:left;white-space:nowrap;
+     font-weight:600;font-size:11px;letter-spacing:.03em;position:sticky;top:0;}
+  th.grp2{background:var(--navy-2);}
+  td{border-bottom:1px solid #eef2f6;padding:7px 9px;vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  tbody tr:nth-child(even) td{background:#fafcfe;}
+  tbody tr:hover td{background:#f3f8ff;}
+  td.mono{font-variant-numeric:tabular-nums;white-space:nowrap;}
+  td.cover{font-weight:700;color:var(--navy);}
   td.nocover{color:var(--err);font-weight:700;}
-  .newly{font-size:12.5px;color:#444;margin-top:8px;}
-  .tablewrap{overflow-x:auto;}
-  #spinner{display:none;margin:10px 0;font-size:14px;color:var(--navy);font-weight:600;}
-  footer{text-align:center;font-size:11px;color:#999;margin:18px 0;}
+  td.rem{font-size:11.5px;color:#4b5a6d;min-width:190px;}
+  .tag{display:inline-block;font-size:9.5px;font-weight:700;padding:1.5px 6px;border-radius:4px;
+       margin-right:4px;vertical-align:1px;letter-spacing:.04em;}
+  .tag.cp{background:var(--gold-soft);color:#7a5f00;}
+  .tag.gw{background:var(--err-bg);color:var(--err);}
+  .tag.sw{background:#e6effa;color:var(--navy-2);}
+  .tag.late{background:var(--warn-bg);color:var(--warn);}
+  .alts{font-size:11px;color:var(--muted);}
+  .rowmeta{font-size:11.5px;color:var(--muted);margin-top:8px;}
+
+  .copybar{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-top:11px;}
+  textarea.tsv{width:100%;height:120px;margin-top:10px;font-family:ui-monospace,Menlo,Consolas,monospace;
+               font-size:11px;border:1px solid var(--line);border-radius:9px;padding:10px;
+               background:#fbfcfe;color:#33414f;white-space:pre;resize:vertical;display:none;}
+  #spinner{display:none;margin:12px 0 0;font-size:13.5px;color:var(--navy);font-weight:600;}
+  details.rules{margin-top:4px;}
+  details.rules summary{cursor:pointer;font-size:12.5px;color:var(--navy);font-weight:700;
+                        list-style:none;padding:4px 0;}
+  details.rules summary::-webkit-details-marker{display:none;}
+  details.rules summary::before{content:"▸ ";}
+  details.rules[open] summary::before{content:"▾ ";}
+  .rulesbody{font-size:12.5px;color:#3c4a5c;padding:10px 2px 2px;
+             display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;}
+  .rulesbody h4{font-size:11.5px;color:var(--navy);text-transform:uppercase;letter-spacing:.05em;
+                margin-bottom:5px;}
+  .rulesbody ul{margin-left:16px;}
+  .rulesbody li{margin-bottom:3px;}
+  footer{text-align:center;font-size:11px;color:#98a5b6;margin:22px 0 0;}
+  @media print{
+    body{background:#fff;padding:0;} .card:first-of-type,header #engineStatus,
+    .copybar,textarea.tsv,#spinner,details.rules{display:none!important;}
+    .card{box-shadow:none;border:none;} .tablewrap{border:1px solid #ccc;}
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <h1>St. Hilary's School <span>· Lesson Swap</span></h1>
-    <div id="engineStatus">Engine: idle (loads on first run)</div>
+    <div>
+      <h1>St. Hilary's School <span>· Lesson Swap</span></h1>
+      <div class="sub">MK, DH &amp; TP campus cover and return-swap planner</div>
+    </div>
+    <div id="engineStatus">Engine: idle</div>
   </header>
 
   <div class="card">
-    <h2>1 · Files</h2>
+    <h2><span class="n">1</span>Timetable files</h2>
     <div class="files">
       <div class="fslot" id="slot-mk">
-        <h3>MK Timetable</h3><div class="req">Required · .xlsx (sheets "MK Monday" … "MK Friday")</div>
+        <h3>MK Overall Timetable</h3><div class="req">Upload at least one campus · sheets "MK Monday" … "MK Friday"</div>
         <div class="meta"><span class="none">No file uploaded</span></div>
         <button class="btn btn-up" onclick="pickFile('mk')">Upload</button>
         <button class="btn btn-del" onclick="delFile('mk')" disabled>Delete</button>
       </div>
       <div class="fslot" id="slot-dh">
-        <h3>DH Timetable</h3><div class="req">Optional · .xlsx (sheets "DH Monday" … "DH Friday")</div>
+        <h3>DH Overall Timetable</h3><div class="req">Upload at least one campus · sheets "DH Monday" … "DH Friday"</div>
         <div class="meta"><span class="none">No file uploaded</span></div>
         <button class="btn btn-up" onclick="pickFile('dh')">Upload</button>
         <button class="btn btn-del" onclick="delFile('dh')" disabled>Delete</button>
       </div>
+      <div class="fslot" id="slot-tp">
+        <h3>TP Overall Timetable</h3><div class="req">Upload at least one campus · sheets "TP Monday" … "TP Friday"</div>
+        <div class="meta"><span class="none">No file uploaded</span></div>
+        <button class="btn btn-up" onclick="pickFile('tp')">Upload</button>
+        <button class="btn btn-del" onclick="delFile('tp')" disabled>Delete</button>
+      </div>
       <div class="fslot" id="slot-cal">
-        <h3>School Calendar</h3><div class="req">Recommended · .xlsx (sheet "Raw")</div>
+        <h3>School Calendar</h3><div class="req">Recommended · sheet "Raw"</div>
         <div class="meta"><span class="none">No file uploaded</span></div>
         <button class="btn btn-up" onclick="pickFile('cal')">Upload</button>
         <button class="btn btn-del" onclick="delFile('cal')" disabled>Delete</button>
       </div>
+      <div class="fslot" id="slot-roster">
+        <h3>Teaching Roster</h3><div class="req">Recommended · MK, DH &amp; TP rows, subject columns</div>
+        <div class="meta"><span class="none">No file uploaded</span></div>
+        <button class="btn btn-up" onclick="pickFile('roster')">Upload</button>
+        <button class="btn btn-del" onclick="delFile('roster')" disabled>Delete</button>
+      </div>
     </div>
-    <div class="hint">Files are stored in this browser and stay until you delete or replace them.</div>
+    <div class="hint">Files stay in this browser until you replace or delete them. Nothing is uploaded anywhere.</div>
   </div>
 
   <div class="card">
-    <h2>2 · Arrange Cover</h2>
+    <h2><span class="n">2</span>Arrange cover</h2>
     <div class="form-row">
-      <div class="field"><label>Sick teacher initials (comma-separated for several)</label>
-        <input id="inTeachers" placeholder="e.g. LWT or LWT, NB"></div>
+      <div class="field"><label>Sick teacher(s)</label>
+        <input id="inTeachers" placeholder="e.g. LWT  or  LWT, NB"></div>
       <div class="field"><label>Sick date</label>
         <input id="inDate" type="date"></div>
-      <div class="field"><label>Also exclude (optional, already-used covers)</label>
+      <div class="field"><label>Also exclude (optional)</label>
         <input id="inExclude" placeholder="e.g. DF, LCF"></div>
       <button class="btn btn-run" id="btnRun" onclick="run()">Arrange swaps</button>
     </div>
     <div id="spinner">⏳ <span id="spinnerTxt">Working…</span></div>
+    <details class="rules">
+      <summary>Rules this planner applies</summary>
+      <div class="rulesbody">
+        <div>
+          <h4>Cover</h4>
+          <ul>
+            <li>Cover teacher must teach the <b>same class</b> that day</li>
+            <li>Their slot must be <b>free or CP</b></li>
+            <li>Must still have <b>≥ 3 free/CP</b> periods after covering</li>
+            <li>Daily lesson cap: <b>max 4</b> lessons Mon/Tue/Thu · <b>max 6</b> Wed/Fri
+                (Study Hall, Reading and Homeroom don't count)</li>
+            <li><b>One cover per teacher</b> per sick day (shared across all sick teachers)</li>
+            <li><b>PE teachers</b> never cover — read from the uploaded Teaching Roster,
+                or TZC/TUW/CJYJ/TCY if none uploaded</li>
+            <li><b>VA teachers</b> used only as last resort — read from the uploaded Teaching
+                Roster, or FSM/WWS/PMY/KPY if none uploaded</li>
+            <li>Ranked by <b>fewest teaching lessons</b>; slots with fewest options assigned first</li>
+          </ul>
+        </div>
+        <div>
+          <h4>Reading &amp; Study Hall</h4>
+          <ul>
+            <li>Reading 8:35–8:55 · <b>none on Friday</b> (assembly)</li>
+            <li>Study Hall = L7 Mon/Tue/Thu, <b>L9 Wed/Fri</b></li>
+            <li>P1 same class → P2 any free teacher with that duty on another day</li>
+            <li>Study Hall blocked: <b>Tue</b> English · <b>Wed</b> Chinese · <b>Thu</b> Maths</li>
+            <li>Make-up days follow the named weekday's timetable for the lesson range
+                given in the calendar (e.g. "Make-up Monday timetable … (L1-L6)")</li>
+          </ul>
+        </div>
+        <div>
+          <h4>CP fallback &amp; return swaps</h4>
+          <ul>
+            <li>Last resort: a teacher with <b>CP</b> in that period covers, even off-class</li>
+            <li>Return = same slot type, different day, sick teacher free/CP, ≥ 3 free left</li>
+            <li>Returns aim to fall <b>within 2 weeks</b> (tagged <b>LATE RETURN</b> after
+                that) and stay <b>within 3 weeks</b> — beyond that only to avoid a Goodwill cover</li>
+            <li>At most <b>one lesson return per day</b> per sick teacher (per date — two
+                different Mondays are two days). Study Hall and Reading returns don't use
+                up a day, so they can share one</li>
+            <li>A return must not give the sick teacher <b>3+ lessons of the same class</b>
+                in one day — this outranks the 2-week target</li>
+            <li>All of a sick teacher's returns are chosen <b>together</b> (lowest total
+                penalty), not one slot at a time</li>
+            <li>A <b>Study Hall return</b> can be any of the cover teacher's Study Halls —
+                it's supervision, so it needn't be the sick teacher's own class</li>
+            <li>Returns respect the same <b>daily lesson cap</b> (4 Mon/Tue/Thu · 6 Wed/Fri)</li>
+            <li>Days with a <b>double (back-to-back) lesson</b> avoided for returns where possible</li>
+            <li>CP remark applies to whoever uses a CP slot — cover teacher <i>or</i> sick teacher</li>
+            <li>No valid return → <b>Goodwill cover</b></li>
+          </ul>
+        </div>
+      </div>
+    </details>
   </div>
 
   <div id="results"></div>
-  <footer>Rules engine: lesson-swap skill (process_lesson_swap.py) · runs entirely in your browser · no data leaves this computer</footer>
+  <footer>Runs entirely in your browser · no data leaves this computer</footer>
 </div>
 
 <script type="text/x-python" id="pycore">
 """
-process_lesson_swap.py
-----------------------
-Reads MK timetable and produces a full cover plan for a sick teacher.
+St. Hilary's School — Lesson Swap engine (v12)
+Rules source: Lesson_Swap_Rules.md + confirmed manual-output feedback.
 
-Usage:
-    python3 process_lesson_swap.py --teacher CH --date 2026-05-12 \
-        [--exclude DF,LCF,YYJ,TJ]  # already-assigned covers today
+v12 changes vs v11:
+  * SAME-CLASS STACKING: a return that would give the sick teacher 3+ lessons of the same
+    class in one day is avoided, and this outranks the 2-week target. (JR already had
+    6F twice on Tuesday; returning WW's 6F on Monday, where JR has it once, is better
+    even though the next free Monday is 18 days out.) Reading/Study Hall don't count.
+  * Returns are now chosen JOINTLY across all of a sick teacher's slots (lowest total
+    penalty), instead of slot-by-slot -- so one slot no longer grabs the only good day
+    and leaves the next slot stacking. Cover choice is part of the same search.
+  * "One return per day" is now per DATE, not per weekday: when two returns both need
+    e.g. Monday L3, the second can go on the following Monday instead of stacking.
+  * 3-WEEK CEILING: a return more than 21 days out is worse than stacking a class, so
+    it is only used when the alternative would be a Goodwill cover.
 
-Outputs a structured cover plan to stdout for Claude to review and write to Excel.
+v11 changes vs v10:
+  * Study Hall / Reading returns no longer consume a day: the "one return swap per day"
+    rule is a LESSON-load rule, so a Study Hall return can share a day with a lesson
+    return (same date, different slot) instead of falling back to a Goodwill cover.
+  * Study Hall returns accept ANY of the cover teacher's Study Halls when none is with
+    one of the sick teacher's own classes -- Study Hall is supervision, not teaching.
+  * Calendar keywords are matched as whole words: "national day" no longer matches inside
+    "InterNATIONAL DAY for Failure", which had wrongly blocked 13/10/2026.
+
+v10 changes vs v9:
+  * RETURN SWAPS WITHIN 2 WEEKS (soft rule): the return day is now chosen with its actual
+    calendar date in hand, so weekdays whose next free date falls within 14 days are
+    preferred over ones pushed out by holidays. Anything that still lands beyond 2 weeks
+    is tagged LATE RETURN rather than silently accepted.
+
+v9 changes vs v8:
+  * DAILY LESSON CAP: max 4 lessons Mon/Tue/Thu, max 6 Wed/Fri (Study Hall, Reading and
+    Homeroom excluded). Applies to cover teachers AND to the sick teacher's return swaps.
+  * Study Hall subject restriction: Maths moved from Friday to THURSDAY
+    (Tue = English, Wed = Chinese, Thu = Maths).
+  * MAKE-UP TIMETABLES: if the calendar says e.g. "Make-up Monday timetable for G1-6
+    (L1-L6) (20/10)", that date follows the named weekday's timetable for the lesson
+    range given. Parsed straight from the calendar, so L1-L6 / L1-L7 / L1-L9 all work.
+
+v8 changes vs v7:
+  * TP campus added: upload a TP Overall Timetable and it merges into the same shared
+    weekly schedule as MK/DH (handles teachers who split their week across campuses).
+  * Reading (row 6) is read from the class-centric block for DH and TP, where it isn't
+    stored under the teacher's own column (unlike MK). This also fixes a pre-existing
+    gap where every DH teacher was silently treated as free during Reading.
+  * PE / VA / English / Chinese / Maths teacher lists are now all derived from the
+    uploaded Teaching Roster (covering TP too), not just PE/VA as in v7. Built-in 2627
+    lists remain the fallback when no roster is uploaded.
+
+v7 changes vs v6:
+  * Teaching Roster can now be uploaded -- P.E. and V.A. teacher lists are read from its
+    columns automatically (campus MK/DH rows only). Falls back to the built-in 2627 lists
+    when no roster is uploaded, or if it can't be parsed.
+
+v6 changes vs v5:
+  * PE teachers (TZC, TUW, CJYJ, TCY) never cover -- added to EXCLUDED_ALWAYS
+  * VA teachers (FSM, WWS, PMY, KPY) deprioritized -- only picked when no other candidate
+  * Return swaps: hard cap of ONE return swap per sick teacher per day
+  * Return swaps: avoid days where the sick teacher has a double (back-to-back) lesson, when possible
+
+v5 changes vs the previous app engine:
+  * CP FALLBACK (last resort) for regular lessons when no same-class teacher is free
+  * MIN_FREE_AFTER made an explicit named constant (= 3 free/CP slots left after covering)
+  * Return-swap DATE SPREADING (different weekdays first, then push 1-3 weeks out)
+  * Remark defaults to "/"; alternatives kept in a separate field, not forced into the remark
+  * L9 (Wed/Fri) time = 14:45 - 15:25
 """
 
-import argparse
-import sys
+import re as _re
+import datetime as _dt
 from datetime import datetime, timedelta
 import openpyxl
 
-SKIP_DATES = set()  # populated from calendar (holidays + make-up/special days to avoid for return swaps)
+# ── Tunables ─────────────────────────────────────────────────────────────────
+MIN_FREE_AFTER = 3      # free/CP slots the teacher must still have AFTER covering
+SKIP_DATES = set()      # populated from the school calendar
 
-# ── Constants ────────────────────────────────────────────────────────────────
+# Daily teaching-lesson cap (Study Hall / Reading / Homeroom do NOT count towards it).
+# Applies both to a teacher taking a cover and to the sick teacher taking a return swap.
+MAX_LESSONS = {0: 4, 1: 4, 2: 6, 3: 4, 4: 6}   # Mon/Tue/Thu = 4 · Wed/Fri = 6
 
-TIMETABLE_MK = "2526 MK overall timetable.xlsx"
-TIMETABLE_DH = "2526 DH_Overall_Timetable_v4.xlsx"
-CALENDAR_FILE = "2526 School Calendar_3 campus (2).xlsx"
+RETURN_WITHIN_DAYS = 14   # soft target: return swaps should land within 2 weeks
+RETURN_MAX_DAYS = 21      # beyond this the engine would rather stack a class than go later;
+                          # only used at all when the alternative is a Goodwill cover
 
-SHEET_NAMES = {
-    0: "MK Monday",
-    1: "MK Tuesday",
-    2: "MK Wednesday",
-    3: "MK Thursday",
-    4: "MK Friday",
-}
+# A return must not pile the sick teacher up to 3+ lessons of the SAME class in one day
+# (Reading and Study Hall don't count). Soft, but ranked above the 2-week target.
+MAX_SAME_CLASS_PER_DAY = 2
+
+TIMETABLE_MK = "2627 MK Overall Timetable.xlsx"
+TIMETABLE_DH = "2627 DH Overall Timetable.xlsx"
+TIMETABLE_TP = "2627 TP Overall Timetable.xlsx"
+
+SHEET_NAMES = {0: "MK Monday", 1: "MK Tuesday", 2: "MK Wednesday",
+               3: "MK Thursday", 4: "MK Friday"}
+DH_SHEET_NAMES = {0: "DH Monday", 1: "DH Tuesday", 2: "DH Wednesday",
+                  3: "DH Thursday", 4: "DH Friday"}
+TP_SHEET_NAMES = {0: "TP Monday", 1: "TP Tuesday", 2: "TP Wednesday",
+                  3: "TP Thursday", 4: "TP Friday"}
 DAY_NAMES = {0: "Monday", 1: "Tuesday", 2: "Wednesday", 3: "Thursday", 4: "Friday"}
 
-# Active rows for each day (rows 5-13 Mon/Tue/Thu, 5-15 Wed/Fri)
-ACTIVE_ROWS = {
-    0: list(range(5, 14)),
-    1: list(range(5, 14)),
-    2: list(range(5, 16)),
-    3: list(range(5, 14)),
-    4: list(range(5, 16)),
-}
-
-# Study Hall row per day
+ACTIVE_ROWS = {0: list(range(5, 14)), 1: list(range(5, 14)), 2: list(range(5, 16)),
+               3: list(range(5, 14)), 4: list(range(5, 16))}
 SH_ROW = {0: 13, 1: 13, 2: 15, 3: 13, 4: 15}
-
 ROW_TO_LESSON = {7: 1, 8: 2, 9: 3, 10: 4, 11: 5, 12: 6, 13: 7, 14: 8, 15: 9}
 LESSON_TIMES = {
-    6:  "8:35 - 8:55",
-    7:  "8:55 - 9:30",
-    8:  "9:30 - 10:05",
-    9:  "10:20 - 10:55",
-    10: "10:55 - 11:30",
-    11: "11:45 - 12:20",
-    12: "12:20 - 12:55",
-    13: "13:35 - 14:15",
-    14: "14:15 - 14:50",
-    15: "14:45 - 15:25",   # NOTE: 14:45, not 14:50
+    6: "8:35 - 8:55", 7: "8:55 - 9:30", 8: "9:30 - 10:05", 9: "10:20 - 10:55",
+    10: "10:55 - 11:30", 11: "11:45 - 12:20", 12: "12:20 - 12:55",
+    13: "13:35 - 14:15", 14: "14:15 - 14:50", 15: "14:45 - 15:25",
 }
 
-EXCLUDED_ALWAYS = {"TZC", "TUW"}
+# Row pairs with no break between them -- used to detect "double" (back-to-back) lessons
+CONSEC_ROW_PAIRS = {(6, 7), (7, 8), (9, 10), (11, 12), (13, 14), (14, 15)}
 
-# Cannot cover Study Hall on these days
-SH_RESTRICTED = {
-    1: {"CS","DF","HP","LM","MA","MF","RM","TM","TY",           # Tuesday: English MK
-        "BT","HL","JR","LYR","RI"},                              # Tuesday: English DH
-    2: {"GLY","LUSY","LWT","LY","TST","WXY","XL","YYJ","ZC",    # Wednesday: Chinese MK
-        "AFZ","BY","CPH","LSQ","WW"},                            # Wednesday: Chinese DH
-    4: {"AF","KIS","LCF","LLL","NB","TJ","YKN",                  # Friday: Maths MK
-        "AL","BK","LW","LWF"},                                   # Friday: Maths DH
+# Fallback lists, used only when no Teaching Roster is uploaded (or it can't be read).
+DEFAULT_EXCLUDED_ALWAYS = {"TZC", "TUW", "CJYJ", "TCY"}   # PE teachers -- never cover (2627 Teaching Roster)
+DEFAULT_VA_TEACHERS = {"FSM", "WWS", "PMY", "KPY"}         # VA teachers -- last resort only (2627 Teaching Roster)
+
+# Working sets actually used by the engine -- reset each run_swap() call, either from an
+# uploaded Teaching Roster or from the DEFAULT_* fallbacks above.
+EXCLUDED_ALWAYS = set(DEFAULT_EXCLUDED_ALWAYS)
+VA_TEACHERS = set(DEFAULT_VA_TEACHERS)
+
+# Fallback subject lists (MK+DH only -- no hardcoded TP list exists). Used only when
+# no Teaching Roster is uploaded, or it can't be read; see parse_teaching_roster().
+DEFAULT_SUBJECTS = {
+    "English": ["CS", "DF", "HP", "LM", "MA", "MF", "RM", "TM", "TY",
+                "BT", "HL", "JR", "LYR", "RI"],
+    "Chinese": ["GLY", "LUSY", "LWT", "LY", "TST", "WXY", "XL", "YYJ", "ZC",
+                "AFZ", "BY", "CPH", "LSQ", "WW"],
+    "Maths":   ["AF", "KIS", "LCF", "LLL", "NB", "TJ", "YKN",
+                "AL", "BK", "LW", "LWF"],
 }
+
+def _default_sh_restricted():
+    # Study Hall blocked days: Tue = English, Wed = Chinese, Thu = Maths
+    return {1: set(DEFAULT_SUBJECTS["English"]), 2: set(DEFAULT_SUBJECTS["Chinese"]),
+            3: set(DEFAULT_SUBJECTS["Maths"])}
+
+# Working value actually used by the engine -- reset each run_swap() call, either from
+# an uploaded Teaching Roster (covering TP too) or from DEFAULT_SUBJECTS above.
+SH_RESTRICTED = _default_sh_restricted()
+
 
 # ── Timetable loading ────────────────────────────────────────────────────────
+_CLASS_CODE_RE = _re.compile(r"^[1-6][A-Z]$")
 
-def load_mk_schedules():
-    """Returns {teacher: {day_idx: {row: value}}}"""
-    wb = openpyxl.load_workbook(TIMETABLE_MK, data_only=True)
+
+def _class_centric_reading(ws, day_idx, schedules):
+    """
+    DH and TP don't store Reading (row 6) under the teacher's own column like MK does --
+    it only appears in the class-centric block (a 3-column group per class: class code /
+    subject label, then the teacher's initials one column to the right). Overlay those
+    Reading assignments onto `schedules` so Reading cover/return-swap logic works for
+    DH and TP the same way it already does for MK.
+    """
+    if day_idx == 4:   # no Reading on Friday, on any campus
+        return
+    row3 = [c.value for c in ws[3]]
+    row4 = [c.value for c in ws[4]]
+    for col_idx, label in enumerate(row3):
+        code = str(label or "").strip().upper()
+        if not _CLASS_CODE_RE.match(code):
+            continue
+        # The teacher-centric section's row 3 also shows a class code in some column
+        # (that teacher's homeroom class) -- only a BLANK row 4 marks a genuine
+        # class-centric block header, so skip anything that's really a teacher column.
+        if col_idx < len(row4) and row4[col_idx] not in (None, ""):
+            continue
+        teacher_col = col_idx + 2   # class-code column + 1 (1-indexed)
+        t = ws.cell(row=6, column=teacher_col).value
+        if not t:
+            continue
+        t = str(t).strip().upper()
+        if not t:
+            continue
+        schedules.setdefault(t, {})
+        sched = schedules[t].setdefault(day_idx, {})
+        if not sched.get(6):
+            sched[6] = code
+
+
+def _load(path, sheet_map, class_centric_reading=False):
+    wb = openpyxl.load_workbook(path, data_only=True)
     schedules = {}
-    for day_idx, sheet_name in SHEET_NAMES.items():
+    for day_idx, sheet_name in sheet_map.items():
+        if sheet_name not in wb.sheetnames:
+            continue
         ws = wb[sheet_name]
-        row4 = [cell.value for cell in ws[4]]
+        row4 = [c.value for c in ws[4]]
         for col_idx, teacher in enumerate(row4):
             if teacher is None:
                 continue
-            col_num = col_idx + 1
-            if teacher not in schedules:
-                schedules[teacher] = {}
-            sched = {}
-            for row_num in ACTIVE_ROWS[day_idx]:
-                sched[row_num] = ws.cell(row=row_num, column=col_num).value
-            schedules[teacher][day_idx] = sched
-    return schedules
-
-
-def load_dh_schedules():
-    """Returns {teacher: {day_idx: {row: value}}} for DH teachers."""
-    wb = openpyxl.load_workbook(TIMETABLE_DH, data_only=True)
-    dh_sheet_map = {
-        0: "DH Monday", 1: "DH Tuesday", 2: "DH Wednesday",
-        3: "DH Thursday", 4: "DH Friday",
-    }
-    schedules = {}
-    for day_idx, sheet_name in dh_sheet_map.items():
-        ws = wb[sheet_name]
-        row4 = [cell.value for cell in ws[4]]
-        for col_idx, teacher in enumerate(row4):
-            if teacher is None:
+            t = str(teacher).strip().upper()
+            if not t:
                 continue
             col_num = col_idx + 1
-            if teacher not in schedules:
-                schedules[teacher] = {}
+            schedules.setdefault(t, {})
             sched = {}
             for row_num in ACTIVE_ROWS[day_idx]:
-                val = ws.cell(row=row_num, column=col_num).value
-                sched[row_num] = val
-            schedules[teacher][day_idx] = sched
+                v = ws.cell(row=row_num, column=col_num).value
+                if isinstance(v, str):
+                    v = v.strip()
+                    if v == "":
+                        v = None
+                sched[row_num] = v
+            schedules[t][day_idx] = sched
+        if class_centric_reading:
+            _class_centric_reading(ws, day_idx, schedules)
     return schedules
+
+
+def _merge_campus(schedules, campus_sched):
+    """Fill `schedules` in place from `campus_sched`, only where the target cell is
+    still blank -- so a teacher who splits their week across campuses (see the Cross
+    Campus Teachers list) gets one composite weekly schedule, each day sourced from
+    whichever campus actually has them that day."""
+    for t, s in campus_sched.items():
+        if t not in schedules:
+            schedules[t] = s
+        else:
+            for d, day_sched in s.items():
+                base = schedules[t].setdefault(d, {})
+                for r, v in day_sched.items():
+                    if base.get(r) in (None, " ") and v is not None:
+                        base[r] = v
+
+
+def load_all(mk_path=None, dh_path=None, tp_path=None):
+    schedules = {}
+    warnings = []
+    for path, sheet_map, label, ccr in (
+        (mk_path, SHEET_NAMES, "MK", False),      # MK stores Reading under the teacher's own column
+        (dh_path, DH_SHEET_NAMES, "DH", True),    # DH/TP need the class-centric Reading overlay
+        (tp_path, TP_SHEET_NAMES, "TP", True),
+    ):
+        if not path:
+            continue
+        try:
+            _merge_campus(schedules, _load(path, sheet_map, class_centric_reading=ccr))
+        except Exception as e:
+            warnings.append("%s timetable not loaded: %s" % (label, e))
+    return schedules, warnings
+
+
+# ── Teaching Roster (P.E. / V.A. lists) ─────────────────────────────────────
+def _norm_header(h):
+    return _re.sub(r"[^A-Z]", "", str(h or "").upper())
+
+
+def parse_teaching_roster(path):
+    """
+    Read the Teaching Roster workbook and return a dict of teacher-initial sets,
+    covering MK, DH and TP campus rows:
+        {"pe": {...}, "va": {...}, "english": {...}, "chinese": {...}, "maths": {...}}
+    Expects a header row containing "Campus", "P.E." and similar subject columns
+    (trailing spaces/punctuation in headers are tolerated).
+    """
+    wb = openpyxl.load_workbook(path, data_only=True)
+    ws = wb[wb.sheetnames[0]]
+    header_idx, header_row = {}, None
+    for row in ws.iter_rows(min_row=1, max_row=min(10, ws.max_row)):
+        norm = [_norm_header(c.value) for c in row]
+        if "CAMPUS" in norm and "PE" in norm:
+            header_idx = {n: i for i, n in enumerate(norm)}
+            header_row = row[0].row
+            break
+    if header_row is None:
+        raise ValueError('no header row found with "Campus" and "P.E." columns')
+
+    campus_i = header_idx.get("CAMPUS")
+    col_of = {"pe": header_idx.get("PE"), "va": header_idx.get("VA"),
+              "english": header_idx.get("ENG"), "chinese": header_idx.get("CHI"),
+              "maths": header_idx.get("MATHS")}
+    result = {key: set() for key in col_of}
+    for row in ws.iter_rows(min_row=header_row + 1, max_row=ws.max_row, values_only=True):
+        if campus_i is None or campus_i >= len(row):
+            continue
+        campus = str(row[campus_i] or "").strip().upper()
+        if campus not in ("MK", "DH", "TP"):
+            continue
+        for key, i in col_of.items():
+            if i is not None and i < len(row) and row[i]:
+                result[key].add(str(row[i]).strip().upper())
+    return result
+
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+def is_free(v):
+    return v is None or v == "CP"
 
-def is_free(val):
-    return val is None or val == "CP"
+
+def is_cp(v):
+    return v == "CP"
+
 
 def count_teaching(sched, day_idx):
     return sum(1 for r in ACTIVE_ROWS[day_idx] if not is_free(sched.get(r)))
 
-def count_free(sched, day_idx):
-    return sum(1 for r in ACTIVE_ROWS[day_idx] if is_free(sched.get(r)))
+
+def counts_as_lesson(row, day_idx):
+    """Reading (row 6), Homeroom (row 5) and Study Hall don't count as lessons."""
+    return row >= 7 and row != SH_ROW[day_idx]
+
+
+def count_lessons(sched, day_idx):
+    """Teaching lessons that day, EXCLUDING Study Hall, Reading and Homeroom."""
+    return sum(1 for r in ACTIVE_ROWS[day_idx]
+               if counts_as_lesson(r, day_idx) and not is_free(sched.get(r)))
+
+
+def count_same_class(sched, day_idx, cls):
+    """How many LESSONS of `cls` the teacher already has that day (Reading/SH excluded)."""
+    return sum(1 for r in ACTIVE_ROWS[day_idx]
+               if counts_as_lesson(r, day_idx) and sched.get(r) == cls)
+
+
+def lesson_cap_ok(sched, day_idx, row):
+    """Taking `row` must not push this teacher past the daily lesson cap.
+    Reading and Study Hall slots are exempt -- they aren't lessons."""
+    if not counts_as_lesson(row, day_idx):
+        return True
+    return count_lessons(sched, day_idx) + 1 <= MAX_LESSONS[day_idx]
+
+
+def day_has_double_lesson(sched, day_idx):
+    """True if the same class is taught in two back-to-back periods that day (a double lesson)."""
+    if not sched:
+        return False
+    for r1, r2 in CONSEC_ROW_PAIRS:
+        if r1 not in ACTIVE_ROWS[day_idx] or r2 not in ACTIVE_ROWS[day_idx]:
+            continue
+        v1, v2 = sched.get(r1), sched.get(r2)
+        if v1 and v2 and not is_free(v1) and not is_free(v2) and v1 == v2:
+            return True
+    return False
+
 
 def free_after_cover(sched, day_idx, cover_row):
-    """Count free slots remaining after covering cover_row."""
-    return sum(
-        1 for r in ACTIVE_ROWS[day_idx]
-        if is_free(sched.get(r)) and r != cover_row
-    )
+    return sum(1 for r in ACTIVE_ROWS[day_idx]
+               if is_free(sched.get(r)) and r != cover_row)
+
 
 def slot_type(row, day_idx):
     if row == 6:
@@ -243,404 +597,435 @@ def slot_type(row, day_idx):
         return "studyhall"
     return "regular"
 
-# ── Cover candidate finding ───────────────────────────────────────────────────
 
-def find_cover_candidates(cls, row_num, day_idx, schedules, sick_teacher,
-                          used_teachers, priority="same_class"):
+def _base_ok(teacher, sick_teacher, used):
+    return not (teacher == sick_teacher or teacher in EXCLUDED_ALWAYS or teacher in used)
+
+
+# ── Candidate finding ────────────────────────────────────────────────────────
+def find_regular_candidates(cls, row_num, day_idx, schedules, sick_teacher, used):
     """
-    Find eligible cover candidates for a lesson slot.
-
-    priority="same_class"  → teacher must teach cls anywhere on that day (Rules 1-5)
-    priority="any"         → any free teacher (for Reading/SH Priority 2 fallback)
+    Regular lesson cover.
+    P1: teacher teaches `cls` somewhere that day AND is free/CP in this slot.
+    P2 (CP fallback, last resort): any teacher whose slot value is CP.
+    Returns (candidates, priority) where candidate = (teaching_count, teacher, slot_value)
     """
-    candidates = []
-    sh_restricted = SH_RESTRICTED.get(day_idx, set())
-    is_sh = (row_num == SH_ROW[day_idx])
-
+    p1, p2 = [], []
     for teacher, day_scheds in schedules.items():
-        if teacher == sick_teacher:
+        if not _base_ok(teacher, sick_teacher, used):
             continue
-        if teacher in EXCLUDED_ALWAYS or teacher in used_teachers:
-            continue
-
         sched = day_scheds.get(day_idx, {})
-
-        if priority == "same_class":
-            teaches_class = any(v == cls for v in sched.values())
-            if not teaches_class:
-                continue
-        # For "any" priority (fallback), no class restriction
-
-        # Slot must be free
+        if not sched:
+            continue
         slot_val = sched.get(row_num)
         if not is_free(slot_val):
             continue
-
-        # Study Hall restriction
-        if is_sh and teacher in sh_restricted:
+        if free_after_cover(sched, day_idx, row_num) < MIN_FREE_AFTER:
             continue
-
-        # ≥3 free after covering
-        if free_after_cover(sched, day_idx, row_num) < 3:
+        if not lesson_cap_ok(sched, day_idx, row_num):
             continue
-
-        teaching = count_teaching(sched, day_idx)
-        candidates.append((teaching, teacher, slot_val))
-
-    candidates.sort()
-    return candidates
-
-
-def find_reading_candidates(cls, day_idx, schedules, sick_teacher, used_teachers, all_day_schedules):
-    """
-    Reading cover:
-    Priority 1: teacher has cls in their Reading slot.
-    Priority 2: any teacher free at Reading who has Reading duty on another day.
-    Returns (candidates, priority_used)
-    """
-    # Priority 1
-    p1 = []
-    for teacher, day_scheds in schedules.items():
-        if teacher == sick_teacher or teacher in EXCLUDED_ALWAYS or teacher in used_teachers:
-            continue
-        sched = day_scheds.get(day_idx, {})
-        if sched.get(6) == cls and free_after_cover(sched, day_idx, 6) >= 3:
-            p1.append((count_teaching(sched, day_idx), teacher, sched.get(6)))
+        tc = count_teaching(sched, day_idx)
+        if any(v == cls for v in sched.values()):
+            p1.append((tc, teacher, slot_val))
+        elif is_cp(slot_val):
+            p2.append((tc, teacher, slot_val))
+    va_key = lambda c: (c[1] in VA_TEACHERS, c[0], c[1])
     if p1:
-        p1.sort()
+        p1.sort(key=va_key)
         return p1, 1
-
-    # Priority 2: free at Reading, has Reading duty on another day
-    p2 = []
-    for teacher, day_scheds in schedules.items():
-        if teacher == sick_teacher or teacher in EXCLUDED_ALWAYS or teacher in used_teachers:
-            continue
-        sched = day_scheds.get(day_idx, {})
-        if not is_free(sched.get(6)):
-            continue
-        if free_after_cover(sched, day_idx, 6) < 3:
-            continue
-        # Has Reading duty on any other day?
-        has_reading_other = any(
-            day_scheds.get(d, {}).get(6) is not None
-            for d in range(5) if d != day_idx
-        )
-        if has_reading_other:
-            p2.append((count_teaching(sched, day_idx), teacher, None))
-    p2.sort()
+    p2.sort(key=va_key)
     return p2, 2
 
 
-def find_sh_candidates(cls, row_num, day_idx, schedules, sick_teacher, used_teachers):
-    """
-    Study Hall cover:
-    Priority 1: teacher has cls in their SH slot.
-    Priority 2: any teacher free at SH who has ANY SH duty on another day.
-    Returns (candidates, priority_used)
-    """
-    sh_restricted = SH_RESTRICTED.get(day_idx, set())
-
-    # Priority 1
-    p1 = []
+def find_reading_candidates(cls, day_idx, schedules, sick_teacher, used):
+    """P1: same class in Reading slot.  P2: free at Reading + has Reading duty another day."""
+    p1, p2 = [], []
     for teacher, day_scheds in schedules.items():
-        if teacher == sick_teacher or teacher in EXCLUDED_ALWAYS or teacher in used_teachers:
+        if not _base_ok(teacher, sick_teacher, used):
             continue
         sched = day_scheds.get(day_idx, {})
-        if teacher in sh_restricted:
+        if not sched:
             continue
-        if sched.get(row_num) == cls and free_after_cover(sched, day_idx, row_num) >= 3:
-            p1.append((count_teaching(sched, day_idx), teacher, sched.get(row_num)))
+        if free_after_cover(sched, day_idx, 6) < MIN_FREE_AFTER:
+            continue
+        val = sched.get(6)
+        tc = count_teaching(sched, day_idx)
+        if val == cls:
+            p1.append((tc, teacher, val))
+        elif is_free(val):
+            has_other = any(day_scheds.get(d, {}).get(6) not in (None, "CP")
+                            for d in range(5) if d != day_idx)
+            if has_other:
+                p2.append((tc, teacher, val))
+    va_key = lambda c: (c[1] in VA_TEACHERS, c[0], c[1])
     if p1:
-        p1.sort()
+        p1.sort(key=va_key)
         return p1, 1
-
-    # Priority 2: free at SH, has SH duty on another day
-    p2 = []
-    for teacher, day_scheds in schedules.items():
-        if teacher == sick_teacher or teacher in EXCLUDED_ALWAYS or teacher in used_teachers:
-            continue
-        sched = day_scheds.get(day_idx, {})
-        if teacher in sh_restricted:
-            continue
-        if not is_free(sched.get(row_num)):
-            continue
-        if free_after_cover(sched, day_idx, row_num) < 3:
-            continue
-        # Has SH duty on any other day?
-        has_sh_other = any(
-            day_scheds.get(d, {}).get(SH_ROW[d]) is not None
-            for d in range(5) if d != day_idx
-        )
-        if has_sh_other:
-            p2.append((count_teaching(sched, day_idx), teacher, None))
-    p2.sort()
+    p2.sort(key=va_key)
     return p2, 2
 
-# ── Return swap finding ───────────────────────────────────────────────────────
 
-def find_return_swap(cover_teacher, cover_slot_type, sick_teacher, day_idx,
-                     sick_classes, schedules, ch_committed):
+def find_sh_candidates(cls, row_num, day_idx, schedules, sick_teacher, used):
+    """P1: same class in their SH slot.  P2: free at SH + has any SH duty another day."""
+    restricted = SH_RESTRICTED.get(day_idx, set())
+    p1, p2 = [], []
+    for teacher, day_scheds in schedules.items():
+        if not _base_ok(teacher, sick_teacher, used) or teacher in restricted:
+            continue
+        sched = day_scheds.get(day_idx, {})
+        if not sched:
+            continue
+        if free_after_cover(sched, day_idx, row_num) < MIN_FREE_AFTER:
+            continue
+        val = sched.get(row_num)
+        tc = count_teaching(sched, day_idx)
+        if val == cls:
+            p1.append((tc, teacher, val))
+        elif is_free(val):
+            has_other = any(day_scheds.get(d, {}).get(SH_ROW[d]) not in (None, "CP")
+                            for d in range(5) if d != day_idx)
+            if has_other:
+                p2.append((tc, teacher, val))
+    va_key = lambda c: (c[1] in VA_TEACHERS, c[0], c[1])
+    if p1:
+        p1.sort(key=va_key)
+        return p1, 1
+    p2.sort(key=va_key)
+    return p2, 2
+
+
+# ── Return swaps ─────────────────────────────────────────────────────────────
+# Return-swap scoring. Lower is better. Order of importance:
+#   no cover  ≫  goodwill (cover never repaid)  >  VA teacher used  >  beyond 3 weeks
+#   >  3+ lessons of the same class in a day  >  beyond 2 weeks  >  Study Hall not the
+#   sick teacher's own class  >  double (back-to-back) lesson that day  >  cover rank
+#   >  same-class count  >  house day order
+P_GOODWILL, P_VA, P_TOO_LATE, P_STACK, P_LATE = 20000, 15000, 12000, 10000, 1000
+P_LATE_PER_DAY = 20              # on top of P_LATE / P_TOO_LATE, per day beyond 2 weeks
+P_SH_ANY, P_DOUBLE, P_RANK, P_SAME = 300, 100, 30, 10
+PREFER_DAY = [2, 3, 4, 1, 0]     # house order: Wed, Thu, Fri, Tue, Mon
+RETURN_OCCURRENCES = 2           # look at the first TWO dates of each weekday (e.g. both Mondays)
+MAX_COVERS_CONSIDERED = 6        # per slot, in rank order (only those with a possible return)
+SEARCH_NODE_CAP = 80000          # safety valve for the joint search
+
+
+def enumerate_returns(cover_teacher, cover_slot_type, sick_teacher, day_idx,
+                      sick_classes, schedules, sick_date=None):
     """
-    Find a valid return swap slot.
-    Returns (ret_day_idx, ret_row, ret_class) or None.
-    Searches Wed→Thu→Fri→Tue→Mon order (prefer near future, skip same day).
+    Every slot the sick teacher could take back from `cover_teacher`, ignoring how the
+    OTHER covers' returns are placed (that is settled jointly in assign_covers).
+    Returns [(penalty, ret_day, ret_row, ret_class, occurrence, date)] -- best slot per
+    DATE, looking at the first RETURN_OCCURRENCES dates of each weekday. "One return per
+    day" is a per-date rule, so e.g. two different Mondays are two different days.
+
+    A regular lesson must be one of the sick teacher's own classes (they must be able to
+    teach it). Study Hall is supervision: their own class is preferred, but any of the
+    cover teacher's Study Halls is accepted rather than falling to a Goodwill cover.
     """
-    search_order = [d for d in [2, 3, 4, 1, 0] if d != day_idx]
     sick_sched = schedules.get(sick_teacher, {})
     cover_sched = schedules.get(cover_teacher, {})
 
-    for ret_day in search_order:
+    # (weekday, occurrence) -> (date, lateness penalty). Without a sick date we can't
+    # place dates, so fall back to weekday-only with no lateness.
+    dates = []
+    for d in range(5):
+        if d == day_idx:
+            continue
+        if sick_date is None:
+            dates.append((d, 0, None, 0))
+            continue
+        for occ in range(RETURN_OCCURRENCES):
+            rd = return_date(sick_date, d, occ)
+            if rd is None:
+                continue
+            days = (rd - sick_date).days
+            over = days - RETURN_WITHIN_DAYS
+            if over <= 0:
+                late_pen = 0
+            elif days <= RETURN_MAX_DAYS:
+                late_pen = P_LATE + P_LATE_PER_DAY * over          # 2-3 weeks: late
+            else:
+                late_pen = P_TOO_LATE + P_LATE_PER_DAY * over      # 3+ weeks: worse than stacking
+            dates.append((d, occ, rd, late_pen))
+
+    best = {}
+    for ret_day, occ, rd, late_pen in dates:
         s_sched = sick_sched.get(ret_day, {})
         c_sched = cover_sched.get(ret_day, {})
+        if not s_sched or not c_sched:
+            continue
         active = ACTIVE_ROWS[ret_day]
         sh_r = SH_ROW[ret_day]
-
         if cover_slot_type == "reading":
-            rows_to_check = [6]
+            rows = [6] if ret_day != 4 else []      # no Reading on Friday
         elif cover_slot_type == "studyhall":
-            rows_to_check = [sh_r]
+            rows = [sh_r]
         else:
-            rows_to_check = [r for r in active if r not in (5, 6, sh_r)]
+            rows = [r for r in active if r not in (5, 6, sh_r)]
+        double = day_has_double_lesson(s_sched, ret_day)
 
-        for ret_row in rows_to_check:
-            if (ret_day, ret_row) in ch_committed:
-                continue
-            # Sick teacher must be free
+        for ret_row in rows:
             if not is_free(s_sched.get(ret_row)):
                 continue
-            # Cover teacher must have one of sick teacher's classes
             cov_val = c_sched.get(ret_row)
-            if cov_val not in sick_classes:
+            if not cov_val or cov_val == "CP":
+                continue                            # nothing to hand back here
+            own_class = cov_val in sick_classes
+            if not own_class and cover_slot_type != "studyhall":
+                continue                            # lessons must be teachable
+            if not lesson_cap_ok(s_sched, ret_day, ret_row):
                 continue
-            # Sick teacher ≥2 free after, accounting for already committed on same day
-            s_free = sum(
-                1 for r in active
-                if is_free(s_sched.get(r)) and r != ret_row
-            )
-            committed_same_day = sum(1 for (d, r) in ch_committed if d == ret_day)
-            if (s_free - committed_same_day) < 3:
+            s_free = sum(1 for r in active if is_free(s_sched.get(r)) and r != ret_row)
+            if s_free < MIN_FREE_AFTER:
                 continue
-            return (ret_day, ret_row, cov_val)
+            same = (count_same_class(s_sched, ret_day, cov_val)
+                    if counts_as_lesson(ret_row, ret_day) else 0)
+            pen = (P_STACK * (same + 1 > MAX_SAME_CLASS_PER_DAY)
+                   + late_pen
+                   + P_SH_ANY * (not own_class)
+                   + P_DOUBLE * double
+                   + P_SAME * same
+                   + PREFER_DAY.index(ret_day))
+            key = (ret_day, occ)
+            if key not in best or pen < best[key][0]:
+                best[key] = (pen, ret_day, ret_row, cov_val, occ, rd)
+    return sorted(best.values(), key=lambda o: o[0])
 
+
+def return_date(base_date, ret_day_idx, occurrence):
+    """
+    The (occurrence+1)-th ret_day_idx weekday strictly after base_date,
+    skipping holidays/special days. With one return per weekday, this is the first
+    available date for that weekday -- see RETURN_WITHIN_DAYS for the 2-week target.
+    """
+    d = base_date + timedelta(days=1)
+    hits = 0
+    limit = base_date + timedelta(days=90)
+    while d <= limit:
+        if d.weekday() == ret_day_idx and d not in SKIP_DATES:
+            if hits == occurrence:
+                return d
+            hits += 1
+        d += timedelta(days=1)
+    # fall back to the first available
+    d = base_date + timedelta(days=1)
+    while d <= limit:
+        if d.weekday() == ret_day_idx and d not in SKIP_DATES:
+            return d
+        d += timedelta(days=1)
     return None
 
-# ── Main cover assignment ─────────────────────────────────────────────────────
 
-def assign_covers(sick_teacher, day_idx, schedules, excluded_today):
-    """
-    Full cover assignment for one sick teacher on one day.
-    Returns list of assignment dicts.
-    """
+# ── Assignment ───────────────────────────────────────────────────────────────
+def assign_covers(sick_teacher, day_idx, schedules, excluded_today, sick_date=None):
     sick_sched = schedules.get(sick_teacher, {}).get(day_idx, {})
     if not sick_sched:
-        print(f"  ⚠  {sick_teacher} has no MK schedule for {DAY_NAMES[day_idx]}")
-        return []
-
+        return None
     sick_classes = {v for v in sick_sched.values() if v and v != "CP"}
-    print(f"\n{sick_teacher}'s lessons on {DAY_NAMES[day_idx]}:")
-    print(f"  Classes: {sorted(sick_classes)}")
 
-    # Build list of slots needing cover
     slots = []
     for row_num in ACTIVE_ROWS[day_idx]:
         val = sick_sched.get(row_num)
         if not val or val == "CP":
             continue
-        if row_num == 5:  # skip homeroom
+        if row_num == 5:                        # homeroom — no cover row
             continue
-        if row_num == 6 and day_idx == 4:  # skip Friday Reading
+        if row_num == 6 and day_idx == 4:       # Friday assembly — no Reading
             continue
-        stype = slot_type(row_num, day_idx)
-        slots.append((row_num, val, stype))
+        slots.append((row_num, val, slot_type(row_num, day_idx)))
 
-    # Find candidates for each slot first (to sort by fewest options)
-    slot_candidates = {}
     used = set(excluded_today)
 
+    def candidates_for(row_num, cls, stype, used_set):
+        if stype == "reading":
+            return find_reading_candidates(cls, day_idx, schedules, sick_teacher, used_set)
+        if stype == "studyhall":
+            return find_sh_candidates(cls, row_num, day_idx, schedules, sick_teacher, used_set)
+        return find_regular_candidates(cls, row_num, day_idx, schedules, sick_teacher, used_set)
+
+    # order slots by fewest options first (avoids deadlocks)
+    counts = {}
     for row_num, cls, stype in slots:
-        if stype == "reading":
-            cands, _ = find_reading_candidates(cls, day_idx, schedules, sick_teacher, used, schedules)
-        elif stype == "studyhall":
-            cands, _ = find_sh_candidates(cls, row_num, day_idx, schedules, sick_teacher, used)
-        else:
-            cands = find_cover_candidates(cls, row_num, day_idx, schedules, sick_teacher, used)
-        slot_candidates[(row_num, cls, stype)] = cands
+        c, _ = candidates_for(row_num, cls, stype, used)
+        counts[(row_num, cls, stype)] = len(c)
+    ordered = sorted(slots, key=lambda s: counts[(s[0], s[1], s[2])])
 
-    # Process fewest-options-first
-    ordered = sorted(slot_candidates.items(), key=lambda x: len(x[1]))
+    # ── Build the option list for every slot ──────────────────────────────
+    # option = (penalty, cover_teacher, rank, slot_val, ret or None)
+    slot_opts, slot_meta = [], []
+    for row_num, cls, stype in ordered:
+        cands, priority = candidates_for(row_num, cls, stype, used)
+        slot_meta.append((row_num, cls, stype, priority, cands))
+        opts = []
+        if cands:
+            with_ret = 0
+            for rank, cand in enumerate(cands):
+                _, teacher, slot_val = cand
+                base = P_RANK * rank + (P_VA if teacher in VA_TEACHERS else 0)
+                rets = enumerate_returns(teacher, stype, sick_teacher, day_idx,
+                                         sick_classes, schedules, sick_date)
+                if rets and with_ret < MAX_COVERS_CONSIDERED:
+                    with_ret += 1
+                    for pen, rd, rr, rc, occ, dt in rets:
+                        opts.append((base + pen, teacher, rank, slot_val, (rd, rr, rc, occ, dt)))
+                if rank < 2 or not rets:
+                    opts.append((base + P_GOODWILL, teacher, rank, slot_val, None))
+            opts.sort(key=lambda o: o[0])
+        slot_opts.append(opts)
 
+    # ── Joint search: pick one option per slot, lowest total penalty ───────
+    # Cross-slot rules: a teacher covers at most once; at most one LESSON return per
+    # DATE (Study Hall / Reading returns don't use up a day, and two different Mondays
+    # are two different days); no two returns in the same date+slot; and the sick
+    # teacher keeps >= MIN_FREE_AFTER free periods on each date.
+    n = len(slot_opts)
+    suffix_min = [0] * (n + 1)
+    for i in range(n - 1, -1, -1):
+        suffix_min[i] = suffix_min[i + 1] + (slot_opts[i][0][0] if slot_opts[i] else 0)
+
+    sick_week = schedules.get(sick_teacher, {})
+    best = {"pen": None, "choice": None, "nodes": 0}
+
+    def _dfs(i, pen, used_t, lesson_days, committed, choice):
+        best["nodes"] += 1
+        if best["nodes"] > SEARCH_NODE_CAP:
+            return
+        if i == n:
+            if best["pen"] is None or pen < best["pen"]:
+                best["pen"], best["choice"] = pen, list(choice)
+            return
+        if not slot_opts[i]:                        # no cover at all for this slot
+            choice.append(None)
+            _dfs(i + 1, pen, used_t, lesson_days, committed, choice)
+            choice.pop()
+            return
+        for opt in slot_opts[i]:
+            opt_pen, teacher, rank, slot_val, ret = opt
+            if best["pen"] is not None and pen + opt_pen + suffix_min[i + 1] >= best["pen"]:
+                break                               # options are sorted: nothing better follows
+            if teacher in used_t:
+                continue
+            if ret:
+                rd, rr, rc, occ, dt = ret
+                dkey = dt if dt is not None else (rd, occ)   # the actual date
+                if (dkey, rr) in committed:
+                    continue
+                is_lesson = counts_as_lesson(rr, rd)
+                if is_lesson and dkey in lesson_days:
+                    continue
+                s_sched = sick_week.get(rd, {})
+                s_free = sum(1 for r in ACTIVE_ROWS[rd] if is_free(s_sched.get(r)) and r != rr)
+                if s_free - sum(1 for (d, _) in committed if d == dkey) < MIN_FREE_AFTER:
+                    continue
+                committed.add((dkey, rr))
+                if is_lesson:
+                    lesson_days.add(dkey)
+            used_t.add(teacher)
+            choice.append(opt)
+            _dfs(i + 1, pen + opt_pen, used_t, lesson_days, committed, choice)
+            choice.pop()
+            used_t.discard(teacher)
+            if ret:
+                committed.discard((dkey, rr))
+                if is_lesson:
+                    lesson_days.discard(dkey)
+
+    _dfs(0, 0, set(), set(), set(), [])
+    choice = best["choice"] or [None] * n
+
+    # ── Turn the chosen options into output rows ──────────────────────────
     assignments = []
-    ch_committed = set()
-
-    for (row_num, cls, stype), _ in ordered:
-        # Re-fetch candidates respecting current `used` set
-        if stype == "reading":
-            cands, priority_used = find_reading_candidates(
-                cls, day_idx, schedules, sick_teacher, used, schedules)
-        elif stype == "studyhall":
-            cands, priority_used = find_sh_candidates(
-                cls, row_num, day_idx, schedules, sick_teacher, used)
-        else:
-            cands = find_cover_candidates(
-                cls, row_num, day_idx, schedules, sick_teacher, used)
-            priority_used = 1
-
-        lesson_label = ROW_TO_LESSON.get(row_num, "Reading") if row_num != 6 else "Reading"
+    for (row_num, cls, stype, priority, cands), opt in zip(slot_meta, choice):
+        lesson_label = "Reading" if row_num == 6 else ROW_TO_LESSON.get(row_num, "")
         time_str = LESSON_TIMES.get(row_num, "")
-
-        if not cands:
+        if opt is None:
             assignments.append({
                 "row": row_num, "lesson": lesson_label, "class": cls, "time": time_str,
-                "cover": None, "slot_status": None, "others": [],
-                "stype": stype, "priority": None,
-                "ret_day": None, "ret_row": None, "ret_class": None,
-                "goodwill": True, "remark": "No cover available",
+                "cover": None, "stype": stype, "priority": None, "alts": [],
+                "ret_day": None, "ret_row": None, "ret_class": None, "ret_occ": 0,
+                "remark": "No cover available", "flags": ["nocover"],
             })
             continue
-
-        cover_teacher = cands[0][1]
-        slot_status = cands[0][2]  # None = free, 'CP' = CP slot
-        others = [c[1] for c in cands[1:]]
+        _, cover_teacher, _, slot_val, ret = opt
+        alts = [c[1] for c in cands if c[1] != cover_teacher][:6]
         used.add(cover_teacher)
-
-        # Find return swap
-        ret = find_return_swap(
-            cover_teacher, stype, sick_teacher, day_idx,
-            sick_classes, schedules, ch_committed
-        )
-
-        goodwill = ret is None
-        ret_day_idx, ret_row, ret_class = ret if ret else (None, None, None)
+        ret_day = ret_row = ret_class = None
+        ret_occ = 0
         if ret:
-            ch_committed.add((ret_day_idx, ret_row))
+            ret_day, ret_row, ret_class, ret_occ, _ = ret
 
-        # Build remark
-        remarks = []
-        if stype == "reading" and priority_used == 2:
-            remarks.append("Reading Swap")
-        if slot_status == "CP":
-            remarks.append(f"{cover_teacher}: Please reschedule or watch co-planning playback")
-        # Check if sick teacher's return slot is their own CP
-        if ret_row and ret_day_idx is not None:
-            s_ret_val = schedules.get(sick_teacher, {}).get(ret_day_idx, {}).get(ret_row)
-            if s_ret_val == "CP":
-                remarks.append(f"{sick_teacher}: Please reschedule or watch co-planning playback")
-        if goodwill:
-            remarks.append("Goodwill cover")
-
-        remark = "; ".join(remarks) if remarks else "/"
-        if others:
-            remark += "; Others: " + ", ".join(others)
+        # ── remark ──
+        remarks, flags = [], []
+        if stype == "reading" and priority == 2:
+            remarks.append("Reading Swap"); flags.append("reading-swap")
+        if stype == "studyhall" and priority == 2:
+            remarks.append("Study Hall swap"); flags.append("sh-swap")
+        if stype == "regular" and priority == 2:
+            flags.append("cp-fallback")
+        if is_cp(slot_val):
+            remarks.append("%s: Please reschedule or watch co-planning playback" % cover_teacher)
+            flags.append("cp-cover")
+        if ret_row is not None:
+            s_ret_val = schedules.get(sick_teacher, {}).get(ret_day, {}).get(ret_row)
+            if is_cp(s_ret_val):
+                remarks.append("%s: Please reschedule or watch co-planning playback" % sick_teacher)
+                flags.append("cp-return")
+        else:
+            remarks.append("Goodwill cover"); flags.append("goodwill")
 
         assignments.append({
             "row": row_num, "lesson": lesson_label, "class": cls, "time": time_str,
-            "cover": cover_teacher, "slot_status": slot_status, "others": others,
-            "stype": stype, "priority": priority_used,
-            "ret_day": ret_day_idx, "ret_row": ret_row, "ret_class": ret_class,
-            "goodwill": goodwill, "remark": remark,
+            "cover": cover_teacher, "stype": stype, "priority": priority, "alts": alts,
+            "ret_day": ret_day, "ret_row": ret_row, "ret_class": ret_class, "ret_occ": ret_occ,
+            "remark": "; ".join(remarks) if remarks else "/", "flags": flags,
         })
 
-    # Sort output by row number for display
     assignments.sort(key=lambda a: a["row"])
     return assignments, used
 
-# ── Output formatting ─────────────────────────────────────────────────────────
 
-def format_date(base_date, ret_day_idx, base_day_idx):
+# ── Calendar ─────────────────────────────────────────────────────────────────
+_HOLIDAY_KW = ["holiday", "festival", "national day", "christmas", "new year", "easter",
+               "ching ming", "chung yeung", "buddha", "labour day", "labor day",
+               "day following", "hksar establishment", "public holiday"]
+_SPECIAL_KW = ["make-up", "makeup", "half-day", "picnic", "sports day", "fun day",
+               "excursion", "assessment", "exam", "examination", "swimming gala",
+               "graduation"]
+
+
+def _kw_pattern(words):
+    """Whole-word keyword matcher (optional trailing 's').
+
+    Plain substring matching gives false positives that silently cancel a school day --
+    "national day" matches inside "InterNATIONAL DAY for Failure", which wrongly blocked
+    13/10/2026. Word boundaries stop that while still catching plurals.
     """
-    Calculate a realistic return date for ret_day_idx, searching forward from base_date.
-    Skips base_date's day. May 18 and May 25 are holidays, skip them.
-    """
-    HOLIDAYS = SKIP_DATES
-    d = base_date + timedelta(days=1)
-    while True:
-        if d.weekday() == ret_day_idx and d not in HOLIDAYS:
-            return d
-        d += timedelta(days=1)
-        if d > base_date + timedelta(days=60):
-            break
-    return None
+    return _re.compile(r"\b(?:" + "|".join(_re.escape(w) for w in words) + r")s?\b", _re.I)
 
 
-def print_plan(sick_teacher, sick_date, day_idx, assignments):
-    print(f"\n{'='*70}")
-    print(f"COVER PLAN: {sick_teacher} sick on {sick_date.strftime('%d/%m/%Y')} ({DAY_NAMES[day_idx]})")
-    print(f"{'='*70}")
-    print(f"{'Slot':<12} {'Class':<6} {'Time':<16} {'Cover':<6} {'Return':<35} {'Remark'}")
-    print("-"*110)
-
-    for a in assignments:
-        lesson = a["lesson"]
-        cls = a["class"]
-        time = a["time"]
-        cover = a["cover"] or "NO COVER"
-        remark = a["remark"]
-
-        if a["ret_day"] is not None:
-            ret_date = format_date(sick_date, a["ret_day"], day_idx)
-            ret_date_str = ret_date.strftime("%d/%m/%Y") if ret_date else "TBD"
-            ret_lesson = ROW_TO_LESSON.get(a["ret_row"]) if a["ret_row"] != 6 else "Reading"
-            ret_time = LESSON_TIMES.get(a["ret_row"], "")
-            ret_str = f"{ret_date_str} ({DAY_NAMES[a['ret_day']]}) {a['ret_class']} L{ret_lesson} {ret_time}"
-        else:
-            ret_str = "GOODWILL"
-
-        print(f"{'L'+str(lesson) if isinstance(lesson,int) else lesson:<12} {cls:<6} {time:<16} {cover:<6} {ret_str:<35} {remark}")
-
-    print()
-    print("Output rows (for Excel):")
-    print("-"*110)
-    print(f"{'Date':<12} {'Day':<10} {'Tchr':<5} {'Cls':<5} {'Les':<8} {'Time':<16} {'Sub':<5} {'SwapDate':<12} {'SwapDay':<10} {'SwapcCls':<8} {'SwapL':<6} {'SwapTime':<16} Remark")
-    for a in assignments:
-        lesson = a["lesson"]
-        cover = a["cover"] or "N/A"
-        if a["ret_day"] is not None:
-            ret_date = format_date(sick_date, a["ret_day"], day_idx)
-            ret_date_str = ret_date.strftime("%d/%m/%Y") if ret_date else "TBD"
-            ret_lesson = ROW_TO_LESSON.get(a["ret_row"]) if a["ret_row"] != 6 else "Reading"
-            ret_time = LESSON_TIMES.get(a["ret_row"], "")
-            ret_day_name = DAY_NAMES[a["ret_day"]]
-            ret_cls = a["ret_class"]
-        else:
-            ret_date_str = ret_lesson = ret_time = ret_day_name = ret_cls = ""
-
-        print(f"{sick_date.strftime('%d/%m/%Y'):<12} {DAY_NAMES[day_idx]:<10} {sick_teacher:<5} {a['class']:<5} {str(lesson):<8} {a['time']:<16} {cover:<5} {ret_date_str:<12} {ret_day_name:<10} {str(ret_cls):<8} {str(ret_lesson):<6} {ret_time:<16} {a['remark']}")
-
-# ── Calendar parsing (added for app) ──────────────────────────────────────────
-
-import re as _re
-
-_HOLIDAY_KW = [
-    "holiday", "festival", "national day", "christmas", "new year", "easter",
-    "ching ming", "chung yeung", "buddha", "labour day", "labor day",
-    "day following", "hksar establishment", "public holiday",
-]
-_SPECIAL_KW = [
-    "make-up", "makeup", "half-day", "picnic", "sports day", "fun day",
-    "excursion", "assessment", "exam", "swimming gala", "graduation",
-]
-
+_HOLIDAY_RE = _kw_pattern(_HOLIDAY_KW)
+_SPECIAL_RE = _kw_pattern(_SPECIAL_KW)
 _DATE_TOKEN = _re.compile(r"(\d{1,2})(?:\s*[-–]\s*(\d{1,2}))?\s*/\s*(\d{1,2})")
+
+# "Make-up Monday timetable for G1-6 (L1-L6) (20/10)" -> that date runs Monday's
+# timetable for lessons 1-6. The weekday and the lesson range are both read from the line.
+_WEEKDAY_IDX = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4}
+_MAKEUP_RE = _re.compile(
+    r"make[-\s]?up\s+(monday|tuesday|wednesday|thursday|friday)\s+timetable", _re.I)
+_LESSON_RANGE_RE = _re.compile(r"L\s*1\s*[-–]\s*L?\s*(\d)", _re.I)
 
 
 def _ay_year(month, ref_date):
-    """Map a calendar month to a year within the school year containing ref_date."""
     ay_start = ref_date.year if ref_date.month >= 8 else ref_date.year - 1
     return ay_start if month >= 8 else ay_start + 1
 
 
 def parse_calendar(path, ref_date):
-    """
-    Parse the 'Raw' sheet. Returns (block_dates, skip_dates, events_by_date)
-      block_dates: set of date — holidays (no school)
-      skip_dates:  set of date — holidays + special/make-up days (avoid for return swaps)
-      events_by_date: {date: [event line, ...]}
-    """
-    import datetime as _dt
+    """Returns (block, skip, events, makeups). `makeups` maps a date to
+    (source_weekday_idx, source_weekday_name, last_lesson_number)."""
     wb = openpyxl.load_workbook(path, data_only=True)
     ws = wb["Raw"]
-    block, skip, events = set(), set(), {}
-    # Event columns: I (joint/holidays), K (MK events), N (administration has dates too but noisy)
+    block, skip, events, makeups = set(), set(), {}, {}
     for row in ws.iter_rows(min_row=2, min_col=9, max_col=12):
         for cell in row:
             if not isinstance(cell.value, str):
@@ -650,8 +1035,14 @@ def parse_calendar(path, ref_date):
                 if not line:
                     continue
                 low = line.lower()
-                is_holiday = any(k in low for k in _HOLIDAY_KW)
-                is_special = any(k in low for k in _SPECIAL_KW)
+                is_holiday = bool(_HOLIDAY_RE.search(low))
+                is_special = bool(_SPECIAL_RE.search(low))
+                mu = _MAKEUP_RE.search(line)
+                if mu:
+                    mu_name = mu.group(1).capitalize()
+                    mu_day = _WEEKDAY_IDX[mu.group(1).lower()]
+                    lr = _LESSON_RANGE_RE.search(line)
+                    mu_last = int(lr.group(1)) if lr else 9
                 for m in _DATE_TOKEN.finditer(line):
                     d1, d2, mon = int(m.group(1)), m.group(2), int(m.group(3))
                     d2 = int(d2) if d2 else d1
@@ -664,25 +1055,51 @@ def parse_calendar(path, ref_date):
                         except ValueError:
                             continue
                         events.setdefault(dt, []).append(line)
+                        if mu:
+                            makeups[dt] = (mu_day, mu_name, mu_last)
                         if is_holiday:
                             block.add(dt); skip.add(dt)
                         elif is_special:
                             skip.add(dt)
-    return block, skip, events
+    return block, skip, events, makeups
 
 
-# ── App entry point ───────────────────────────────────────────────────────────
+def apply_makeup(schedules, day_idx, src_day_idx, last_lesson):
+    """
+    A make-up day runs another weekday's timetable for lessons 1..last_lesson.
+    Rewrite every teacher's schedule for that date so those lesson rows come from the
+    source weekday; Reading, Homeroom, Study Hall and any later lessons stay as the
+    actual weekday. Returns the list of rows that were swapped in.
+    """
+    # Row 7 = L1 ... row 15 = L9, so lessons 1..last_lesson are rows 7..6+last_lesson.
+    # Study Hall sits inside that numbering (L7 or L9) and moves with it; Reading (row 6)
+    # and Homeroom (row 5) are outside it and stay with the actual weekday.
+    rows = [r for r in ACTIVE_ROWS[day_idx]
+            if 7 <= r <= 6 + last_lesson and r in ACTIVE_ROWS[src_day_idx]]
+    for day_scheds in schedules.values():
+        tgt = day_scheds.get(day_idx)
+        if tgt is None:
+            continue
+        src = day_scheds.get(src_day_idx, {})
+        for r in rows:
+            tgt[r] = src.get(r)
+    return rows
 
-def _fmt_assignment(a, sick_teacher, sick_date, day_idx):
+
+# ── Entry point ──────────────────────────────────────────────────────────────
+def _fmt(a, sick_teacher, sick_date, day_idx):
+    flags = list(a["flags"])
     if a["ret_day"] is not None:
-        ret_date = format_date(sick_date, a["ret_day"], day_idx)
-        ret_date_str = ret_date.strftime("%d/%m/%Y") if ret_date else "TBD"
-        ret_lesson = ROW_TO_LESSON.get(a["ret_row"]) if a["ret_row"] != 6 else "Reading"
+        rd = return_date(sick_date, a["ret_day"], a["ret_occ"])
+        rd_str = rd.strftime("%d/%m/%Y") if rd else "TBD"
+        if rd is not None and (rd - sick_date).days > RETURN_WITHIN_DAYS:
+            flags.append("late-return")
+        ret_lesson = "Reading" if a["ret_row"] == 6 else ROW_TO_LESSON.get(a["ret_row"], "")
         ret_time = LESSON_TIMES.get(a["ret_row"], "")
         ret_day_name = DAY_NAMES[a["ret_day"]]
         ret_cls = a["ret_class"]
     else:
-        ret_date_str = ret_lesson = ret_time = ret_day_name = ret_cls = ""
+        rd_str = ret_lesson = ret_time = ret_day_name = ret_cls = ""
     return {
         "date": sick_date.strftime("%d/%m/%Y"),
         "day": DAY_NAMES[day_idx],
@@ -691,101 +1108,133 @@ def _fmt_assignment(a, sick_teacher, sick_date, day_idx):
         "lesson": str(a["lesson"]),
         "time": a["time"],
         "cover": a["cover"] or "NO COVER",
-        "swap_date": ret_date_str,
+        "swap_date": rd_str,
         "swap_day": ret_day_name,
         "swap_class": str(ret_cls) if ret_cls else "",
         "swap_lesson": str(ret_lesson) if ret_lesson else "",
         "swap_time": ret_time,
         "remark": a["remark"],
+        "alts": a["alts"],
+        "flags": flags,
+        "stype": a["stype"],
     }
 
 
 def run_swap(teachers_csv, date_str, exclude_csv="",
-             mk_path=TIMETABLE_MK, dh_path=TIMETABLE_DH, cal_path=None):
-    """
-    Multi-sick entry point. Returns a JSON-serialisable dict.
-    """
-    import datetime as _dt
-    global SKIP_DATES
+             mk_path=None, dh_path=None, tp_path=None, cal_path=None, roster_path=None):
+    global SKIP_DATES, EXCLUDED_ALWAYS, VA_TEACHERS, SH_RESTRICTED
     out = {"ok": True, "warnings": [], "teachers": [], "error": None}
+    if not (mk_path or dh_path or tp_path):
+        return {"ok": False, "error": "Please upload at least one campus timetable (MK, DH or TP).",
+                "warnings": [], "teachers": []}
+
+    if roster_path:
+        try:
+            r = parse_teaching_roster(roster_path)
+            EXCLUDED_ALWAYS = r["pe"] or set(DEFAULT_EXCLUDED_ALWAYS)
+            VA_TEACHERS = r["va"] or set(DEFAULT_VA_TEACHERS)
+            SH_RESTRICTED = {
+                1: r["english"] or set(DEFAULT_SUBJECTS["English"]),
+                2: r["chinese"] or set(DEFAULT_SUBJECTS["Chinese"]),
+                3: r["maths"] or set(DEFAULT_SUBJECTS["Maths"]),
+            }
+            missing = [k for k in ("pe", "va", "english", "chinese", "maths") if not r[k]]
+            if missing:
+                out["warnings"].append(
+                    "Teaching Roster had no values for: %s — using the built-in list(s) for those." % ", ".join(missing))
+        except Exception as e:
+            EXCLUDED_ALWAYS = set(DEFAULT_EXCLUDED_ALWAYS)
+            VA_TEACHERS = set(DEFAULT_VA_TEACHERS)
+            SH_RESTRICTED = _default_sh_restricted()
+            out["warnings"].append("Teaching Roster could not be read (%s) — using the built-in PE/VA/subject lists." % e)
+    else:
+        EXCLUDED_ALWAYS = set(DEFAULT_EXCLUDED_ALWAYS)
+        VA_TEACHERS = set(DEFAULT_VA_TEACHERS)
+        SH_RESTRICTED = _default_sh_restricted()
+        out["warnings"].append("No Teaching Roster uploaded — using the built-in 2627 PE/VA/subject lists (upload it to keep these current, and to cover TP).")
 
     sick_date = datetime.strptime(date_str, "%Y-%m-%d")
     day_idx = sick_date.weekday()
     if day_idx > 4:
-        return {"ok": False, "error": "Date is a weekend — no school.", "warnings": [], "teachers": []}
+        return {"ok": False, "error": "That date is a weekend — no school.",
+                "warnings": [], "teachers": []}
 
-    # Calendar
     SKIP_DATES = set()
-    cal_events_today = []
+    makeup_today = None
     if cal_path:
         try:
-            block, skip, events = parse_calendar(cal_path, sick_date.date())
+            block, skip, events, makeups = parse_calendar(cal_path, sick_date.date())
+            makeup_today = makeups.get(sick_date.date())
             SKIP_DATES = {datetime(d.year, d.month, d.day) for d in skip}
             today = sick_date.date()
-            cal_events_today = events.get(today, [])
             if today in block:
                 return {"ok": False,
-                        "error": "The sick date appears to be a school holiday: "
-                                 + " | ".join(cal_events_today),
+                        "error": "That date looks like a school holiday: "
+                                 + " | ".join(sorted(set(events.get(today, [])))),
                         "warnings": [], "teachers": []}
-            if cal_events_today:
+            if events.get(today):
                 out["warnings"].append(
-                    "Calendar events on the sick date — please verify the timetable is normal: "
-                    + " | ".join(sorted(set(cal_events_today))))
+                    "Calendar events on this date — check the timetable is normal: "
+                    + " | ".join(sorted(set(events[today]))))
         except Exception as e:
-            out["warnings"].append(f"Calendar could not be parsed ({e}); return-swap dates not filtered for events.")
+            out["warnings"].append("Calendar could not be parsed (%s); "
+                                   "return-swap dates not filtered for holidays." % e)
     else:
-        out["warnings"].append("No school calendar uploaded — holidays/events NOT checked.")
+        out["warnings"].append("No school calendar uploaded — holidays are NOT being checked.")
 
-    # Timetables
-    global TIMETABLE_MK, TIMETABLE_DH
-    TIMETABLE_MK, TIMETABLE_DH = mk_path, dh_path
-    schedules = load_mk_schedules()
-    try:
-        for t, s in load_dh_schedules().items():
-            if t not in schedules:
-                schedules[t] = s
-            else:
-                # Teacher on both campuses: merge per-day rows (DH fills MK gaps)
-                for d, dh_sched in s.items():
-                    mk_sched = schedules[t].setdefault(d, {})
-                    for r, v in dh_sched.items():
-                        if mk_sched.get(r) in (None, " ") and v is not None:
-                            mk_sched[r] = v
-    except Exception as e:
-        out["warnings"].append(f"DH timetable not loaded: {e}")
+    schedules, load_warnings = load_all(mk_path, dh_path, tp_path)
+    out["warnings"].extend(load_warnings)
+
+    if makeup_today:
+        src_day, src_name, last_lesson = makeup_today
+        if src_day == day_idx:
+            makeup_today = None
+        else:
+            rows = apply_makeup(schedules, day_idx, src_day, last_lesson)
+            out["warnings"].append(
+                "Make-up timetable: this %s runs the %s timetable for L1-L%d, so lessons %s "
+                "are taken from %s. Reading and any later lessons stay as normal %s. "
+                "Double-check any teacher who works a different campus on %s."
+                % (DAY_NAMES[day_idx], src_name, last_lesson,
+                   "-".join(str(ROW_TO_LESSON[r]) for r in (rows[0], rows[-1])) if rows else "none",
+                   src_name, DAY_NAMES[day_idx], src_name))
+    if not mk_path:
+        out["warnings"].append("No MK timetable uploaded — MK-only teachers will not be found.")
+    if not dh_path:
+        out["warnings"].append("No DH timetable uploaded — DH-only teachers (e.g. KPY) will not be found.")
+    if not tp_path:
+        out["warnings"].append("No TP timetable uploaded — TP-only teachers will not be found.")
 
     excluded = set(t.strip().upper() for t in exclude_csv.split(",") if t.strip())
     excluded |= EXCLUDED_ALWAYS
-
     teachers = [t.strip().upper() for t in teachers_csv.split(",") if t.strip()]
-    excluded |= set(teachers)  # sick teachers can never cover each other
+    excluded |= set(teachers)   # sick teachers never cover each other
+
     for sick_teacher in teachers:
         entry = {"teacher": sick_teacher, "rows": [], "newly_used": [], "note": None}
         if sick_teacher not in schedules:
-            entry["note"] = f"{sick_teacher} not found in any timetable."
-            out["teachers"].append(entry)
-            continue
-        result = assign_covers(sick_teacher, day_idx, schedules, excluded)
+            entry["note"] = "%s was not found in either timetable." % sick_teacher
+            out["teachers"].append(entry); continue
+        result = assign_covers(sick_teacher, day_idx, schedules, excluded, sick_date)
         if not result:
-            entry["note"] = f"{sick_teacher} has no schedule on {DAY_NAMES[day_idx]}."
-            out["teachers"].append(entry)
-            continue
+            entry["note"] = "%s has no lessons on %s." % (sick_teacher, DAY_NAMES[day_idx])
+            out["teachers"].append(entry); continue
         assignments, used_final = result
-        entry["rows"] = [_fmt_assignment(a, sick_teacher, sick_date, day_idx) for a in assignments]
-        newly = sorted(used_final - excluded)
-        entry["newly_used"] = newly
-        excluded |= used_final  # shared pool across sick teachers
+        if not assignments:
+            entry["note"] = "%s has no lessons needing cover on %s." % (sick_teacher, DAY_NAMES[day_idx])
+            out["teachers"].append(entry); continue
+        entry["rows"] = [_fmt(a, sick_teacher, sick_date, day_idx) for a in assignments]
+        entry["newly_used"] = sorted(used_final - excluded)
+        excluded |= used_final
         out["teachers"].append(entry)
 
     return out
-
 </script>
 
 <script>
 "use strict";
-/* ── IndexedDB file store ── */
-const SLOTS = {mk:"MK Timetable", dh:"DH Timetable", cal:"School Calendar"};
+/* ── IndexedDB file store ──────────────────────────────────────────── */
+const SLOTS = {mk:"MK Timetable", dh:"DH Timetable", tp:"TP Timetable", cal:"School Calendar", roster:"Teaching Roster"};
 let db;
 function openDB(){return new Promise((res,rej)=>{
   const r = indexedDB.open("lessonSwapDB",1);
@@ -802,10 +1251,10 @@ async function refreshSlot(key){
   const slot = document.getElementById("slot-"+key);
   const meta = slot.querySelector(".meta");
   const delBtn = slot.querySelector(".btn-del");
-  const upBtn = slot.querySelector(".btn-up");
+  const upBtn  = slot.querySelector(".btn-up");
   if(rec){
     slot.classList.add("loaded");
-    meta.innerHTML = "<b>"+esc(rec.name)+"</b><br>"+(rec.size/1024).toFixed(0)+" KB · uploaded "+rec.date;
+    meta.innerHTML = "<b>"+esc(rec.name)+"</b><br>"+(rec.size/1024).toFixed(0)+" KB · "+rec.date;
     delBtn.disabled = false; upBtn.textContent = "Replace";
   }else{
     slot.classList.remove("loaded");
@@ -819,7 +1268,7 @@ function pickFile(key){
   inp.onchange = async () => {
     const f = inp.files[0]; if(!f) return;
     const buf = await f.arrayBuffer();
-    await idbPut(key,{name:f.name,size:f.size,date:new Date().toLocaleString(),data:buf});
+    await idbPut(key,{name:f.name,size:f.size,date:new Date().toLocaleDateString(),data:buf});
     refreshSlot(key);
   };
   inp.click();
@@ -829,12 +1278,12 @@ async function delFile(key){
   await idbDel(key); refreshSlot(key);
 }
 
-/* ── Pyodide engine ── */
+/* ── Pyodide engine ────────────────────────────────────────────────── */
 let pyodide=null, coreLoaded=false;
 async function ensureEngine(){
   const st = document.getElementById("engineStatus");
   if(coreLoaded) return;
-  st.textContent = "Engine: loading Python… (first time ~15s)";
+  st.textContent = "Engine: loading Python… (~15s first time)";
   pyodide = await loadPyodide();
   st.textContent = "Engine: loading openpyxl…";
   try{ await pyodide.loadPackage("openpyxl"); }
@@ -847,42 +1296,49 @@ async function ensureEngine(){
   st.textContent = "Engine: ready ✓";
 }
 
-/* ── Run ── */
+/* ── Run ───────────────────────────────────────────────────────────── */
 async function run(){
   const teachers = document.getElementById("inTeachers").value.trim();
-  const date = document.getElementById("inDate").value;
-  const exclude = document.getElementById("inExclude").value.trim();
-  const results = document.getElementById("results");
+  const date     = document.getElementById("inDate").value;
+  const exclude  = document.getElementById("inExclude").value.trim();
+  const results  = document.getElementById("results");
   results.innerHTML = "";
   if(!teachers){ alert("Please enter the sick teacher's initials."); return; }
   if(!date){ alert("Please pick the sick date."); return; }
-  const mk = await idbGet("mk");
-  if(!mk){ alert("Please upload the MK timetable first."); return; }
-  const dh = await idbGet("dh"), cal = await idbGet("cal");
+  const mk = await idbGet("mk"), dh = await idbGet("dh"), tp = await idbGet("tp");
+  if(!mk && !dh && !tp){ alert("Please upload at least one campus timetable (MK, DH or TP) first."); return; }
+  const cal = await idbGet("cal"), roster = await idbGet("roster");
 
-  const btn = document.getElementById("btnRun");
+  const btn  = document.getElementById("btnRun");
   const spin = document.getElementById("spinner"), spinTxt = document.getElementById("spinnerTxt");
   btn.disabled = true; spin.style.display = "block";
   try{
     spinTxt.textContent = "Loading engine…";
     await ensureEngine();
     spinTxt.textContent = "Computing cover plan…";
-    pyodide.FS.writeFile("/mk.xlsx", new Uint8Array(mk.data));
-    if(dh) pyodide.FS.writeFile("/dh.xlsx", new Uint8Array(dh.data));
-    if(cal) pyodide.FS.writeFile("/cal.xlsx", new Uint8Array(cal.data));
+    if(mk)     pyodide.FS.writeFile("/mk.xlsx",     new Uint8Array(mk.data));
+    if(dh)     pyodide.FS.writeFile("/dh.xlsx",     new Uint8Array(dh.data));
+    if(tp)     pyodide.FS.writeFile("/tp.xlsx",     new Uint8Array(tp.data));
+    if(cal)    pyodide.FS.writeFile("/cal.xlsx",    new Uint8Array(cal.data));
+    if(roster) pyodide.FS.writeFile("/roster.xlsx", new Uint8Array(roster.data));
     pyodide.globals.set("_teachers", teachers);
     pyodide.globals.set("_date", date);
     pyodide.globals.set("_exclude", exclude);
+    pyodide.globals.set("_has_mk", !!mk);
     pyodide.globals.set("_has_dh", !!dh);
+    pyodide.globals.set("_has_tp", !!tp);
     pyodide.globals.set("_has_cal", !!cal);
+    pyodide.globals.set("_has_roster", !!roster);
     const out = pyodide.runPython(`
 import json, io, contextlib
 _buf = io.StringIO()
 with contextlib.redirect_stdout(_buf):
     _r = run_swap(_teachers, _date, _exclude,
-                  mk_path="/mk.xlsx",
-                  dh_path="/dh.xlsx" if _has_dh else "/nonexistent.xlsx",
-                  cal_path="/cal.xlsx" if _has_cal else None)
+                  mk_path="/mk.xlsx" if _has_mk else None,
+                  dh_path="/dh.xlsx" if _has_dh else None,
+                  tp_path="/tp.xlsx" if _has_tp else None,
+                  cal_path="/cal.xlsx" if _has_cal else None,
+                  roster_path="/roster.xlsx" if _has_roster else None)
 json.dumps(_r)
 `);
     render(JSON.parse(out), teachers, date);
@@ -893,52 +1349,163 @@ json.dumps(_r)
   }
 }
 
-/* ── Render ── */
+/* ── Render ────────────────────────────────────────────────────────── */
 const HEADERS = ["Date","Day","Subject Teacher","Class","Lesson","Time","Substitute Teacher",
                  "Swap Date","Swap Day","Class","Swap Lesson","Swap Time","Remark"];
-function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+const KEYS = ["date","day","sick","class","lesson","time","cover",
+              "swap_date","swap_day","swap_class","swap_lesson","swap_time","remark"];
+function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+
+/* Tags summarise flags visually; the phrases they replace are stripped from the
+   displayed remark so nothing reads twice. The Excel copy keeps the full remark. */
+function remarkCell(row){
+  const f = row.flags || [];
+  let tags = "", text = row.remark || "";
+  const strip = p => { text = text.split(p).join(""); };
+  if(f.indexOf("goodwill")>=0){     tags += '<span class="tag gw">GOODWILL</span>';      strip("Goodwill cover"); }
+  if(f.indexOf("cp-fallback")>=0)   tags += '<span class="tag cp">CP FALLBACK</span>';
+  if(f.indexOf("late-return")>=0)   tags += '<span class="tag late">LATE RETURN</span>';
+  if(f.indexOf("reading-swap")>=0){ tags += '<span class="tag sw">READING SWAP</span>';  strip("Reading Swap"); }
+  if(f.indexOf("sh-swap")>=0){      tags += '<span class="tag sw">STUDY HALL SWAP</span>'; strip("Study Hall swap"); }
+  text = text.replace(/;\s*;/g,";").replace(/^[;\s]+|[;\s]+$/g,"");
+  if(!text) text = tags ? "" : "/";
+  return tags + esc(text);
+}
+
 function render(r, teachers, date){
   const el = document.getElementById("results");
-  let h = '<div class="card"><h2>3 · Cover Plan — '+esc(teachers)+' · '+esc(date)+'</h2>';
+  let h = '<div class="card"><h2><span class="n">3</span>Cover plan — '+esc(teachers)+' · '+esc(date)+'</h2>';
   if(!r.ok){
     h += '<div class="banner err">'+esc(r.error||"Failed")+'</div></div>';
     el.innerHTML = h; return;
   }
   for(const w of r.warnings) h += '<div class="banner warn">⚠ '+esc(w)+'</div>';
-  for(const t of r.teachers){
-    h += '<div class="tcard"><h3>'+esc(t.teacher)+'<span class="pill">'+t.rows.length+' lesson(s)</span></h3>';
-    if(t.note){ h += '<div class="banner err">'+esc(t.note)+'</div></div>'; continue; }
-    h += '<div class="tablewrap"><table><tr>';
-    for(const hd of HEADERS) h += '<th>'+hd+'</th>';
-    h += '</tr>';
-    for(const row of t.rows){
-      const vals = [row.date,row.day,row.sick,row["class"],row.lesson,row.time,row.cover,
-                    row.swap_date,row.swap_day,row.swap_class,row.swap_lesson,row.swap_time,row.remark];
-      h += '<tr>' + vals.map((v,i)=>'<td'+(i===6&&v==="NO COVER"?' class="nocover"':'')+'>'+esc(v||"")+'</td>').join('') + '</tr>';
-    }
-    h += '</table></div>';
-    if(t.newly_used.length) h += '<div class="newly"><b>Covers used:</b> '+esc(t.newly_used.join(", "))+'</div>';
-    h += '</div>';
+
+  let anyRows = 0, gw = 0, nc = 0;
+  for(const t of r.teachers) for(const row of t.rows){
+    anyRows++;
+    if(row.flags.indexOf("goodwill")>=0) gw++;
+    if(row.cover==="NO COVER") nc++;
   }
-  h += '<button class="btn btn-up" onclick="copyTSV()">Copy all rows (paste into Excel)</button></div>';
+
+  for(const t of r.teachers){
+    h += '<div class="tcard"><h3>'+esc(t.teacher)+
+         '<span class="pill">'+t.rows.length+' lesson'+(t.rows.length===1?'':'s')+'</span>';
+    const tgw = t.rows.filter(x=>x.flags.indexOf("goodwill")>=0).length;
+    const tnc = t.rows.filter(x=>x.cover==="NO COVER").length;
+    if(tgw) h += '<span class="pill gold">'+tgw+' goodwill</span>';
+    if(tnc) h += '<span class="pill red">'+tnc+' uncovered</span>';
+    h += '</h3>';
+    if(t.note){ h += '<div class="banner warn">'+esc(t.note)+'</div></div>'; continue; }
+
+    h += '<div class="tablewrap"><table><thead><tr>';
+    HEADERS.forEach((hd,i)=>{ h += '<th'+(i>=7?' class="grp2"':'')+'>'+hd+'</th>'; });
+    h += '<th class="grp2">Alternatives</th></tr></thead><tbody>';
+    for(const row of t.rows){
+      h += '<tr>';
+      KEYS.forEach((k,i)=>{
+        let v = row[k]||"";
+        let cls = "";
+        if(i===0||i===5||i===7||i===11) cls = "mono";
+        if(i===6) cls = (v==="NO COVER") ? "nocover" : "cover";
+        if(i===12){ h += '<td class="rem">'+remarkCell(row)+'</td>'; return; }
+        h += '<td'+(cls?' class="'+cls+'"':'')+'>'+esc(v)+'</td>';
+      });
+      h += '<td class="alts">'+esc((row.alts||[]).join(", ")||"—")+'</td>';
+      h += '</tr>';
+    }
+    h += '</tbody></table></div>';
+    if(t.newly_used.length) h += '<div class="rowmeta"><b>Covers used:</b> '+esc(t.newly_used.join(", "))+'</div>';
+    h += '<div class="copybar">'+
+         '<button class="btn btn-ghost" onclick="copyTSV(\''+esc(t.teacher)+'\',false)">Copy '+esc(t.teacher)+'’s rows</button>'+
+         '</div></div>';
+  }
+
+  if(anyRows){
+    h += '<div class="banner ok">'+anyRows+' row'+(anyRows===1?'':'s')+' ready'+
+         (gw?' · '+gw+' goodwill':'')+(nc?' · '+nc+' with no cover':'')+
+         '. Copy below, then paste into the <b>Combined</b> sheet at the first empty row (columns A–M).</div>';
+    h += '<div class="copybar">'+
+         '<button class="btn btn-up" onclick="copyTSV(null,false)">Copy all rows for Excel</button>'+
+         '<button class="btn btn-ghost" onclick="copyTSV(null,true)">Copy with headers</button>'+
+         '<button class="btn btn-ghost" onclick="togglePaste()">Show paste box</button>'+
+         '<button class="btn btn-ghost" onclick="window.print()">Print</button>'+
+         '<span id="copyMsg" class="rowmeta"></span></div>'+
+         '<textarea class="tsv" id="tsvBox" readonly spellcheck="false"></textarea>';
+  }
+  h += '</div>';
   el.innerHTML = h;
   window._lastResult = r;
 }
-function copyTSV(){
-  const r = window._lastResult; if(!r) return;
-  let lines = [];
-  for(const t of r.teachers) for(const row of t.rows)
-    lines.push([row.date,row.day,row.sick,row["class"],row.lesson,row.time,
-                row.cover==="NO COVER"?"":row.cover,row.swap_date,row.swap_day,
-                row.swap_class,row.swap_lesson,row.swap_time,row.remark].join("\t"));
-  navigator.clipboard.writeText(lines.join("\n")).then(()=>alert(lines.length+" row(s) copied."));
+
+/* ── Excel-ready copy ──────────────────────────────────────────────── */
+function buildTSV(teacher, withHeaders){
+  const r = window._lastResult; if(!r) return "";
+  const lines = [];
+  if(withHeaders) lines.push(HEADERS.join("\t"));
+  for(const t of r.teachers){
+    if(teacher && t.teacher !== teacher) continue;
+    for(const row of t.rows){
+      lines.push(KEYS.map(k=>{
+        let v = row[k]==null ? "" : String(row[k]);
+        if(k==="cover" && v==="NO COVER") v = "";
+        return v.replace(/[\t\r\n]+/g," ");
+      }).join("\t"));
+    }
+  }
+  return lines.join("\r\n");
+}
+function flash(msg){
+  const el = document.getElementById("copyMsg");
+  if(el){ el.textContent = msg; setTimeout(()=>{el.textContent="";}, 3500); }
+}
+function copyTSV(teacher, withHeaders){
+  const tsv = buildTSV(teacher, withHeaders);
+  if(!tsv){ alert("Nothing to copy."); return; }
+  const n = tsv.split("\r\n").length - (withHeaders?1:0);
+  const done = () => flash("✓ "+n+" row"+(n===1?"":"s")+" copied — paste into Excel.");
+  // Primary: async clipboard API
+  if(navigator.clipboard && window.isSecureContext){
+    navigator.clipboard.writeText(tsv).then(done).catch(()=>legacyCopy(tsv,done));
+  }else{
+    legacyCopy(tsv, done);
+  }
+}
+function legacyCopy(text, done){
+  // Fallback for file:// pages where the async clipboard API is unavailable
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed"; ta.style.top = "-1000px"; ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.focus(); ta.select();
+  let ok = false;
+  try{ ok = document.execCommand("copy"); }catch(e){ ok = false; }
+  document.body.removeChild(ta);
+  if(ok){ done(); }
+  else{
+    const box = document.getElementById("tsvBox");
+    if(box){ box.value = text; box.style.display = "block"; box.focus(); box.select(); }
+    flash("Copy blocked by the browser — the rows are selected below, press ⌘C.");
+  }
+}
+function togglePaste(){
+  const box = document.getElementById("tsvBox");
+  if(!box) return;
+  if(box.style.display === "block"){ box.style.display = "none"; return; }
+  box.value = buildTSV(null,false);
+  box.style.display = "block";
+  box.focus(); box.select();
 }
 
-/* ── Init ── */
+/* ── Init ──────────────────────────────────────────────────────────── */
 (async()=>{
   await openDB();
   for(const k of Object.keys(SLOTS)) await refreshSlot(k);
-  document.getElementById("inDate").value = new Date().toISOString().slice(0,10);
+  const d = new Date();
+  document.getElementById("inDate").value =
+    d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+  document.getElementById("inTeachers").addEventListener("keydown", e=>{ if(e.key==="Enter") run(); });
+  document.getElementById("inExclude").addEventListener("keydown", e=>{ if(e.key==="Enter") run(); });
 })();
 </script>
 </body>
