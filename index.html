@@ -217,7 +217,10 @@
         <div>
           <h4>CP fallback &amp; return swaps</h4>
           <ul>
-            <li>Last resort: a teacher with <b>CP</b> in that period covers, even off-class</li>
+            <li>Last resort: a teacher with <b>CP</b> in that period covers, even off-class.
+                Also used when the only same-class teacher is already covering another
+                of the sick teacher's lessons (e.g. a Chinese double lesson) — that slot
+                falls back to CP rather than being left uncovered</li>
             <li>Return = same slot type, different day, sick teacher free/CP, ≥ 3 free left</li>
             <li>Returns aim to fall <b>within 2 weeks</b> (tagged <b>LATE RETURN</b> after
                 that) and stay <b>within 3 weeks</b> — beyond that only to avoid a Goodwill cover</li>
@@ -246,7 +249,7 @@
 
 <script type="text/x-python" id="pycore">
 """
-St. Hilary's School — Lesson Swap engine (v12)
+St. Hilary's School — Lesson Swap engine (v13)
 Rules source: Lesson_Swap_Rules.md + confirmed manual-output feedback.
 
 v12 changes vs v11:
@@ -630,11 +633,11 @@ def find_regular_candidates(cls, row_num, day_idx, schedules, sick_teacher, used
         elif is_cp(slot_val):
             p2.append((tc, teacher, slot_val))
     va_key = lambda c: (c[1] in VA_TEACHERS, c[0], c[1])
-    if p1:
-        p1.sort(key=va_key)
-        return p1, 1
+    p1.sort(key=va_key)
     p2.sort(key=va_key)
-    return p2, 2
+    # Both tiers are returned (P1 first, each tagged with its tier) so the joint search
+    # can fall back to a P2 cover when the only P1 teacher is already taken by another slot.
+    return [(tc, t, v, 1) for tc, t, v in p1] + [(tc, t, v, 2) for tc, t, v in p2], (1 if p1 else 2)
 
 
 def find_reading_candidates(cls, day_idx, schedules, sick_teacher, used):
@@ -658,11 +661,11 @@ def find_reading_candidates(cls, day_idx, schedules, sick_teacher, used):
             if has_other:
                 p2.append((tc, teacher, val))
     va_key = lambda c: (c[1] in VA_TEACHERS, c[0], c[1])
-    if p1:
-        p1.sort(key=va_key)
-        return p1, 1
+    p1.sort(key=va_key)
     p2.sort(key=va_key)
-    return p2, 2
+    # Both tiers are returned (P1 first, each tagged with its tier) so the joint search
+    # can fall back to a P2 cover when the only P1 teacher is already taken by another slot.
+    return [(tc, t, v, 1) for tc, t, v in p1] + [(tc, t, v, 2) for tc, t, v in p2], (1 if p1 else 2)
 
 
 def find_sh_candidates(cls, row_num, day_idx, schedules, sick_teacher, used):
@@ -687,11 +690,11 @@ def find_sh_candidates(cls, row_num, day_idx, schedules, sick_teacher, used):
             if has_other:
                 p2.append((tc, teacher, val))
     va_key = lambda c: (c[1] in VA_TEACHERS, c[0], c[1])
-    if p1:
-        p1.sort(key=va_key)
-        return p1, 1
+    p1.sort(key=va_key)
     p2.sort(key=va_key)
-    return p2, 2
+    # Both tiers are returned (P1 first, each tagged with its tier) so the joint search
+    # can fall back to a P2 cover when the only P1 teacher is already taken by another slot.
+    return [(tc, t, v, 1) for tc, t, v in p1] + [(tc, t, v, 2) for tc, t, v in p2], (1 if p1 else 2)
 
 
 # ── Return swaps ─────────────────────────────────────────────────────────────
@@ -701,6 +704,8 @@ def find_sh_candidates(cls, row_num, day_idx, schedules, sick_teacher, used):
 #   sick teacher's own class  >  double (back-to-back) lesson that day  >  cover rank
 #   >  same-class count  >  house day order
 P_GOODWILL, P_VA, P_TOO_LATE, P_STACK, P_LATE = 20000, 15000, 12000, 10000, 1000
+P_NOCOVER = 50000                # leaving a slot uncovered: worse than anything else
+P_P2 = 11000                     # second-tier cover (CP fallback / Reading or SH swap)
 P_LATE_PER_DAY = 20              # on top of P_LATE / P_TOO_LATE, per day beyond 2 weeks
 P_SH_ANY, P_DOUBLE, P_RANK, P_SAME = 300, 100, 30, 10
 PREFER_DAY = [2, 3, 4, 1, 0]     # house order: Wed, Thu, Fri, Tue, Mon
@@ -860,16 +865,16 @@ def assign_covers(sick_teacher, day_idx, schedules, excluded_today, sick_date=No
         if cands:
             with_ret = 0
             for rank, cand in enumerate(cands):
-                _, teacher, slot_val = cand
-                base = P_RANK * rank + (P_VA if teacher in VA_TEACHERS else 0)
+                _, teacher, slot_val, prio = cand
+                base = P_RANK * rank + (P_VA if teacher in VA_TEACHERS else 0) + (P_P2 if prio == 2 else 0)
                 rets = enumerate_returns(teacher, stype, sick_teacher, day_idx,
                                          sick_classes, schedules, sick_date)
                 if rets and with_ret < MAX_COVERS_CONSIDERED:
                     with_ret += 1
                     for pen, rd, rr, rc, occ, dt in rets:
-                        opts.append((base + pen, teacher, rank, slot_val, (rd, rr, rc, occ, dt)))
+                        opts.append((base + pen, teacher, rank, slot_val, (rd, rr, rc, occ, dt), prio))
                 if rank < 2 or not rets:
-                    opts.append((base + P_GOODWILL, teacher, rank, slot_val, None))
+                    opts.append((base + P_GOODWILL, teacher, rank, slot_val, None, prio))
             opts.sort(key=lambda o: o[0])
         slot_opts.append(opts)
 
@@ -900,7 +905,7 @@ def assign_covers(sick_teacher, day_idx, schedules, excluded_today, sick_date=No
             choice.pop()
             return
         for opt in slot_opts[i]:
-            opt_pen, teacher, rank, slot_val, ret = opt
+            opt_pen, teacher, rank, slot_val, ret, prio = opt
             if best["pen"] is not None and pen + opt_pen + suffix_min[i + 1] >= best["pen"]:
                 break                               # options are sorted: nothing better follows
             if teacher in used_t:
@@ -929,6 +934,14 @@ def assign_covers(sick_teacher, day_idx, schedules, excluded_today, sick_date=No
                 committed.discard((dkey, rr))
                 if is_lesson:
                     lesson_days.discard(dkey)
+        # Fallback: leave THIS slot uncovered and carry on. Without this, a slot whose
+        # only candidates are already used by earlier slots (e.g. a Chinese double lesson
+        # where one teacher is the sole same-class cover) killed the whole search and
+        # every slot came back "No cover available".
+        if best["pen"] is None or pen + P_NOCOVER + suffix_min[i + 1] < best["pen"]:
+            choice.append(None)
+            _dfs(i + 1, pen + P_NOCOVER, used_t, lesson_days, committed, choice)
+            choice.pop()
 
     _dfs(0, 0, set(), set(), set(), [])
     choice = best["choice"] or [None] * n
@@ -946,7 +959,7 @@ def assign_covers(sick_teacher, day_idx, schedules, excluded_today, sick_date=No
                 "remark": "No cover available", "flags": ["nocover"],
             })
             continue
-        _, cover_teacher, _, slot_val, ret = opt
+        _, cover_teacher, _, slot_val, ret, priority = opt
         alts = [c[1] for c in cands if c[1] != cover_teacher][:6]
         used.add(cover_teacher)
         ret_day = ret_row = ret_class = None
