@@ -168,6 +168,12 @@
         <button class="btn btn-up" onclick="pickFile('roster')">Upload</button>
         <button class="btn btn-del" onclick="delFile('roster')" disabled>Delete</button>
       </div>
+      <div class="fslot" id="slot-cross">
+        <h3>Cross Campus Teachers</h3><div class="req">Recommended · columns Initials, Mon … Fri (MK / DH / TP)</div>
+        <div class="meta"><span class="none">No file uploaded</span></div>
+        <button class="btn btn-up" onclick="pickFile('cross')">Upload</button>
+        <button class="btn btn-del" onclick="delFile('cross')" disabled>Delete</button>
+      </div>
     </div>
     <div class="hint">Files stay in this browser until you replace or delete them. Nothing is uploaded anywhere.</div>
   </div>
@@ -200,6 +206,11 @@
                 or TZC/TUW/CJYJ/TCY if none uploaded</li>
             <li><b>VA teachers</b> used only as last resort — read from the uploaded Teaching
                 Roster, or FSM/WWS/PMY/KPY if none uploaded</li>
+            <li><b>Same campus only</b>: a cover teacher must be at the lesson's campus that
+                day, and a return is only placed where the sick teacher is at the cover's
+                campus that day. Read from the uploaded Cross Campus Teachers file (a split
+                day like "MK/DH" = not used that day); without it, campus presence is
+                inferred from the timetables</li>
             <li>Ranked by <b>fewest teaching lessons</b>; slots with fewest options assigned first</li>
           </ul>
         </div>
@@ -249,7 +260,7 @@
 
 <script type="text/x-python" id="pycore">
 """
-St. Hilary's School — Lesson Swap engine (v13)
+St. Hilary's School — Lesson Swap engine (v14)
 Rules source: Lesson_Swap_Rules.md + confirmed manual-output feedback.
 
 v12 changes vs v11:
@@ -393,6 +404,75 @@ def _default_sh_restricted():
 # an uploaded Teaching Roster (covering TP too) or from DEFAULT_SUBJECTS above.
 SH_RESTRICTED = _default_sh_restricted()
 
+# ── Campus presence ──────────────────────────────────────────────────────────
+# A lesson belongs to the campus whose timetable it came from. A cover teacher must be at
+# that campus on the day; a return is only placed where the sick teacher is at the cover
+# teacher's campus. Presence comes from the uploaded Cross Campus Teachers file when
+# available (a split day such as "MK/DH" means the teacher is not used that day), and is
+# otherwise inferred from which campus timetable(s) have entries for the teacher that day.
+CAMPUSES = ("MK", "DH", "TP")
+LESSON_CAMPUS = {}        # teacher -> day_idx -> row -> campus
+TEACHER_HOME = {}         # teacher -> {campus}: every timetable the teacher appears in
+TEACHER_CAMPUS_DAYS = {}  # teacher -> day_idx -> {campus}: timetables with an entry that day
+CROSS_CAMPUS = {}         # teacher -> day_idx -> {campus} (empty set = split day, unavailable)
+
+
+def lesson_campus(teacher, day_idx, row):
+    return LESSON_CAMPUS.get(teacher, {}).get(day_idx, {}).get(row)
+
+
+def at_campus(teacher, day_idx, campus):
+    if campus is None:
+        return True
+    cc = CROSS_CAMPUS.get(teacher)
+    if cc is not None and day_idx in cc:
+        return campus in cc[day_idx]
+    today = TEACHER_CAMPUS_DAYS.get(teacher, {}).get(day_idx)
+    if today:
+        return campus in today
+    return campus in TEACHER_HOME.get(teacher, set())
+
+
+def parse_cross_campus(path):
+    """Read the Cross Campus Teachers workbook: a header row with "Initials" and
+    Mon/Tue/Wed/Thu(r)/Fri columns, each cell MK / DH / TP, or "MK/DH" for a split day."""
+    wb = openpyxl.load_workbook(path, data_only=True)
+    out = {}
+    day_keys = {"MON": 0, "TUE": 1, "TUES": 1, "WED": 2, "THU": 3, "THUR": 3, "THURS": 3, "FRI": 4}
+    for ws in wb.worksheets:
+        header = None
+        for row in ws.iter_rows(values_only=True):
+            if header is None:
+                norm = [_norm_header(v) for v in row]
+                if "INITIALS" in norm and any(k in day_keys for k in norm):
+                    header = {}
+                    for i, h in enumerate(norm):
+                        if h == "INITIALS":
+                            header["init"] = i
+                        elif h in day_keys:
+                            header[day_keys[h]] = i
+                continue
+            init = row[header["init"]] if header["init"] < len(row) else None
+            if not init:
+                continue
+            t = str(init).strip().upper()
+            days = {}
+            for d in range(5):
+                i = header.get(d)
+                if i is None or i >= len(row) or row[i] is None:
+                    continue
+                v = str(row[i]).strip().upper()
+                if not v:
+                    continue
+                parts = [x.strip() for x in v.replace("\\", "/").split("/") if x.strip()]
+                parts = [x for x in parts if x in CAMPUSES]
+                days[d] = set(parts) if len(parts) == 1 else set()   # split day -> unavailable
+            if days:
+                out[t] = days
+        if out:
+            break
+    return out
+
 
 # ── Timetable loading ────────────────────────────────────────────────────────
 _CLASS_CODE_RE = _re.compile(r"^[1-6][A-Z]$")
@@ -462,12 +542,21 @@ def _load(path, sheet_map, class_centric_reading=False):
     return schedules
 
 
-def _merge_campus(schedules, campus_sched):
+def _merge_campus(schedules, campus_sched, label=None):
     """Fill `schedules` in place from `campus_sched`, only where the target cell is
     still blank -- so a teacher who splits their week across campuses (see the Cross
     Campus Teachers list) gets one composite weekly schedule, each day sourced from
     whichever campus actually has them that day."""
     for t, s in campus_sched.items():
+        if label:
+            TEACHER_HOME.setdefault(t, set()).add(label)
+            for d, day_sched in s.items():
+                if any(v not in (None, " ") for v in day_sched.values()):
+                    TEACHER_CAMPUS_DAYS.setdefault(t, {}).setdefault(d, set()).add(label)
+                lc = LESSON_CAMPUS.setdefault(t, {}).setdefault(d, {})
+                for r, v in day_sched.items():
+                    if v not in (None, " ") and r not in lc:
+                        lc[r] = label
         if t not in schedules:
             schedules[t] = s
         else:
@@ -481,6 +570,7 @@ def _merge_campus(schedules, campus_sched):
 def load_all(mk_path=None, dh_path=None, tp_path=None):
     schedules = {}
     warnings = []
+    LESSON_CAMPUS.clear(); TEACHER_HOME.clear(); TEACHER_CAMPUS_DAYS.clear()
     for path, sheet_map, label, ccr in (
         (mk_path, SHEET_NAMES, "MK", False),      # MK stores Reading under the teacher's own column
         (dh_path, DH_SHEET_NAMES, "DH", True),    # DH/TP need the class-centric Reading overlay
@@ -489,7 +579,7 @@ def load_all(mk_path=None, dh_path=None, tp_path=None):
         if not path:
             continue
         try:
-            _merge_campus(schedules, _load(path, sheet_map, class_centric_reading=ccr))
+            _merge_campus(schedules, _load(path, sheet_map, class_centric_reading=ccr), label)
         except Exception as e:
             warnings.append("%s timetable not loaded: %s" % (label, e))
     return schedules, warnings
@@ -614,8 +704,9 @@ def find_regular_candidates(cls, row_num, day_idx, schedules, sick_teacher, used
     Returns (candidates, priority) where candidate = (teaching_count, teacher, slot_value)
     """
     p1, p2 = [], []
+    campus = lesson_campus(sick_teacher, day_idx, row_num)
     for teacher, day_scheds in schedules.items():
-        if not _base_ok(teacher, sick_teacher, used):
+        if not _base_ok(teacher, sick_teacher, used) or not at_campus(teacher, day_idx, campus):
             continue
         sched = day_scheds.get(day_idx, {})
         if not sched:
@@ -643,8 +734,9 @@ def find_regular_candidates(cls, row_num, day_idx, schedules, sick_teacher, used
 def find_reading_candidates(cls, day_idx, schedules, sick_teacher, used):
     """P1: same class in Reading slot.  P2: free at Reading + has Reading duty another day."""
     p1, p2 = [], []
+    campus = lesson_campus(sick_teacher, day_idx, 6)
     for teacher, day_scheds in schedules.items():
-        if not _base_ok(teacher, sick_teacher, used):
+        if not _base_ok(teacher, sick_teacher, used) or not at_campus(teacher, day_idx, campus):
             continue
         sched = day_scheds.get(day_idx, {})
         if not sched:
@@ -672,8 +764,10 @@ def find_sh_candidates(cls, row_num, day_idx, schedules, sick_teacher, used):
     """P1: same class in their SH slot.  P2: free at SH + has any SH duty another day."""
     restricted = SH_RESTRICTED.get(day_idx, set())
     p1, p2 = [], []
+    campus = lesson_campus(sick_teacher, day_idx, row_num)
     for teacher, day_scheds in schedules.items():
-        if not _base_ok(teacher, sick_teacher, used) or teacher in restricted:
+        if (not _base_ok(teacher, sick_teacher, used) or teacher in restricted
+                or not at_campus(teacher, day_idx, campus)):
             continue
         sched = day_scheds.get(day_idx, {})
         if not sched:
@@ -775,6 +869,8 @@ def enumerate_returns(cover_teacher, cover_slot_type, sick_teacher, day_idx,
             cov_val = c_sched.get(ret_row)
             if not cov_val or cov_val == "CP":
                 continue                            # nothing to hand back here
+            if not at_campus(sick_teacher, ret_day, lesson_campus(cover_teacher, ret_day, ret_row)):
+                continue                            # sick teacher isn't at that campus that day
             own_class = cov_val in sick_classes
             if not own_class and cover_slot_type != "studyhall":
                 continue                            # lessons must be teachable
@@ -1096,6 +1192,16 @@ def apply_makeup(schedules, day_idx, src_day_idx, last_lesson):
         src = day_scheds.get(src_day_idx, {})
         for r in rows:
             tgt[r] = src.get(r)
+    for t, lc in LESSON_CAMPUS.items():
+        tgt = lc.get(day_idx)
+        if tgt is None:
+            continue
+        src = lc.get(src_day_idx, {})
+        for r in rows:
+            if r in src:
+                tgt[r] = src[r]
+            else:
+                tgt.pop(r, None)
     return rows
 
 
@@ -1134,8 +1240,9 @@ def _fmt(a, sick_teacher, sick_date, day_idx):
 
 
 def run_swap(teachers_csv, date_str, exclude_csv="",
-             mk_path=None, dh_path=None, tp_path=None, cal_path=None, roster_path=None):
-    global SKIP_DATES, EXCLUDED_ALWAYS, VA_TEACHERS, SH_RESTRICTED
+             mk_path=None, dh_path=None, tp_path=None, cal_path=None, roster_path=None,
+             cross_path=None):
+    global SKIP_DATES, EXCLUDED_ALWAYS, VA_TEACHERS, SH_RESTRICTED, CROSS_CAMPUS
     out = {"ok": True, "warnings": [], "teachers": [], "error": None}
     if not (mk_path or dh_path or tp_path):
         return {"ok": False, "error": "Please upload at least one campus timetable (MK, DH or TP).",
@@ -1198,6 +1305,17 @@ def run_swap(teachers_csv, date_str, exclude_csv="",
     schedules, load_warnings = load_all(mk_path, dh_path, tp_path)
     out["warnings"].extend(load_warnings)
 
+    CROSS_CAMPUS = {}
+    if cross_path:
+        try:
+            CROSS_CAMPUS = parse_cross_campus(cross_path)
+            if not CROSS_CAMPUS:
+                out["warnings"].append("Cross Campus Teachers file had no usable rows (need Initials + Mon…Fri columns) — campus presence inferred from the timetables instead.")
+        except Exception as e:
+            out["warnings"].append("Cross Campus Teachers file could not be read (%s) — campus presence inferred from the timetables instead." % e)
+    else:
+        out["warnings"].append("No Cross Campus Teachers file uploaded — campus presence is inferred from the timetables, which can be wrong for teachers who split their week.")
+
     if makeup_today:
         src_day, src_name, last_lesson = makeup_today
         if src_day == day_idx:
@@ -1247,7 +1365,7 @@ def run_swap(teachers_csv, date_str, exclude_csv="",
 <script>
 "use strict";
 /* ── IndexedDB file store ──────────────────────────────────────────── */
-const SLOTS = {mk:"MK Timetable", dh:"DH Timetable", tp:"TP Timetable", cal:"School Calendar", roster:"Teaching Roster"};
+const SLOTS = {mk:"MK Timetable", dh:"DH Timetable", tp:"TP Timetable", cal:"School Calendar", roster:"Teaching Roster", cross:"Cross Campus Teachers"};
 let db;
 function openDB(){return new Promise((res,rej)=>{
   const r = indexedDB.open("lessonSwapDB",1);
@@ -1320,7 +1438,7 @@ async function run(){
   if(!date){ alert("Please pick the sick date."); return; }
   const mk = await idbGet("mk"), dh = await idbGet("dh"), tp = await idbGet("tp");
   if(!mk && !dh && !tp){ alert("Please upload at least one campus timetable (MK, DH or TP) first."); return; }
-  const cal = await idbGet("cal"), roster = await idbGet("roster");
+  const cal = await idbGet("cal"), roster = await idbGet("roster"), cross = await idbGet("cross");
 
   const btn  = document.getElementById("btnRun");
   const spin = document.getElementById("spinner"), spinTxt = document.getElementById("spinnerTxt");
@@ -1334,6 +1452,7 @@ async function run(){
     if(tp)     pyodide.FS.writeFile("/tp.xlsx",     new Uint8Array(tp.data));
     if(cal)    pyodide.FS.writeFile("/cal.xlsx",    new Uint8Array(cal.data));
     if(roster) pyodide.FS.writeFile("/roster.xlsx", new Uint8Array(roster.data));
+    if(cross)  pyodide.FS.writeFile("/cross.xlsx",  new Uint8Array(cross.data));
     pyodide.globals.set("_teachers", teachers);
     pyodide.globals.set("_date", date);
     pyodide.globals.set("_exclude", exclude);
@@ -1342,6 +1461,7 @@ async function run(){
     pyodide.globals.set("_has_tp", !!tp);
     pyodide.globals.set("_has_cal", !!cal);
     pyodide.globals.set("_has_roster", !!roster);
+    pyodide.globals.set("_has_cross", !!cross);
     const out = pyodide.runPython(`
 import json, io, contextlib
 _buf = io.StringIO()
@@ -1351,7 +1471,8 @@ with contextlib.redirect_stdout(_buf):
                   dh_path="/dh.xlsx" if _has_dh else None,
                   tp_path="/tp.xlsx" if _has_tp else None,
                   cal_path="/cal.xlsx" if _has_cal else None,
-                  roster_path="/roster.xlsx" if _has_roster else None)
+                  roster_path="/roster.xlsx" if _has_roster else None,
+                  cross_path="/cross.xlsx" if _has_cross else None)
 json.dumps(_r)
 `);
     render(JSON.parse(out), teachers, date);
