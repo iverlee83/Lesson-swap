@@ -233,6 +233,9 @@
                 of the sick teacher's lessons (e.g. a Chinese double lesson) — that slot
                 falls back to CP rather than being left uncovered</li>
             <li>Return = same slot type, different day, sick teacher free/CP, ≥ 3 free left</li>
+            <li>Returns are placed on the <b>earliest date the rules allow</b> — every day of
+                delay counts against a slot, so a valid Wednesday beats an equally valid
+                Monday the following week</li>
             <li>Returns aim to fall <b>within 2 weeks</b> (tagged <b>LATE RETURN</b> after
                 that) and stay <b>within 3 weeks</b> — beyond that only to avoid a Goodwill cover</li>
             <li>At most <b>one lesson return per day</b> per sick teacher (per date — two
@@ -260,7 +263,7 @@
 
 <script type="text/x-python" id="pycore">
 """
-St. Hilary's School — Lesson Swap engine (v14)
+St. Hilary's School — Lesson Swap engine (v15)
 Rules source: Lesson_Swap_Rules.md + confirmed manual-output feedback.
 
 v12 changes vs v11:
@@ -801,6 +804,9 @@ P_GOODWILL, P_VA, P_TOO_LATE, P_STACK, P_LATE = 20000, 15000, 12000, 10000, 1000
 P_NOCOVER = 50000                # leaving a slot uncovered: worse than anything else
 P_P2 = 11000                     # second-tier cover (CP fallback / Reading or SH swap)
 P_LATE_PER_DAY = 20              # on top of P_LATE / P_TOO_LATE, per day beyond 2 weeks
+P_SOON_PER_DAY = 200             # every day of delay costs this -- returns land as early as the
+                                 # hard rules (daily lesson cap, one lesson return per date, free
+                                 # periods, campus) allow. Outranks day-order and class-spreading.
 P_SH_ANY, P_DOUBLE, P_RANK, P_SAME = 300, 100, 30, 10
 PREFER_DAY = [2, 3, 4, 1, 0]     # house order: Wed, Thu, Fri, Tue, Mon
 RETURN_OCCURRENCES = 2           # look at the first TWO dates of each weekday (e.g. both Mondays)
@@ -839,12 +845,10 @@ def enumerate_returns(cover_teacher, cover_slot_type, sick_teacher, day_idx,
                 continue
             days = (rd - sick_date).days
             over = days - RETURN_WITHIN_DAYS
-            if over <= 0:
-                late_pen = 0
-            elif days <= RETURN_MAX_DAYS:
-                late_pen = P_LATE + P_LATE_PER_DAY * over          # 2-3 weeks: late
-            else:
-                late_pen = P_TOO_LATE + P_LATE_PER_DAY * over      # 3+ weeks: worse than stacking
+            late_pen = P_SOON_PER_DAY * days                       # sooner is always better
+            if over > 0:
+                late_pen += (P_LATE if days <= RETURN_MAX_DAYS     # 2-3 weeks: late
+                             else P_TOO_LATE) + P_LATE_PER_DAY * over
             dates.append((d, occ, rd, late_pen))
 
     best = {}
