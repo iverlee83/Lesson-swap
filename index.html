@@ -97,6 +97,13 @@
   .tag.gw{background:var(--err-bg);color:var(--err);}
   .tag.sw{background:#e6effa;color:var(--navy-2);}
   .tag.late{background:var(--warn-bg);color:var(--warn);}
+  .tag.bad{background:var(--err-bg);color:var(--err);}
+  select.pick{font:inherit;font-size:12.5px;max-width:230px;padding:3px 5px;
+    border:1px solid var(--line);border-radius:5px;background:#fff;color:inherit;}
+  select.pick:hover{border-color:var(--navy-2);}
+  select.pick.selCover{font-weight:700;color:var(--navy-2);max-width:170px;}
+  select.pick:disabled{opacity:.55;}
+  .edited select.pick{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-soft);}
   .alts{font-size:11px;color:var(--muted);}
   .rowmeta{font-size:11.5px;color:var(--muted);margin-top:8px;}
 
@@ -121,6 +128,8 @@
   @media print{
     body{background:#fff;padding:0;} .card:first-of-type,header #engineStatus,
     .copybar,textarea.tsv,#spinner,details.rules{display:none!important;}
+    select.pick{border:none;appearance:none;-webkit-appearance:none;background:transparent;
+      padding:0;max-width:none;box-shadow:none;}
     .card{box-shadow:none;border:none;} .tablewrap{border:1px solid #ccc;}
   }
 </style>
@@ -245,6 +254,10 @@
                 in one day — this outranks the 2-week target</li>
             <li>All of a sick teacher's returns are chosen <b>together</b> (lowest total
                 penalty), not one slot at a time</li>
+            <li>Every row is <b>editable</b>: the Substitute Teacher and Swap Date cells are
+                dropdowns. Changing the cover re-picks the earliest valid return automatically;
+                a clash with another row (same teacher covering twice, two lesson returns on one
+                date) is flagged in the Remark column but never blocked</li>
             <li>A <b>Study Hall return</b> can be any of the cover teacher's Study Halls —
                 it's supervision, so it needn't be the sick teacher's own class</li>
             <li>Returns respect the same <b>daily lesson cap</b> (4 Mon/Tue/Thu · 6 Wed/Fri)</li>
@@ -263,7 +276,7 @@
 
 <script type="text/x-python" id="pycore">
 """
-St. Hilary's School — Lesson Swap engine (v15)
+St. Hilary's School — Lesson Swap engine (v16)
 Rules source: Lesson_Swap_Rules.md + confirmed manual-output feedback.
 
 v12 changes vs v11:
@@ -922,6 +935,29 @@ def return_date(base_date, ret_day_idx, occurrence):
 
 
 # ── Assignment ───────────────────────────────────────────────────────────────
+def _remark(stype, priority, cover_teacher, slot_val, sick_teacher, ret_day, ret_row, schedules):
+    """The Remark column and its flags -- shared by the planner and by the
+    row editor, so a hand-picked cover reads exactly like a computed one."""
+    remarks, flags = [], []
+    if stype == "reading" and priority == 2:
+        remarks.append("Reading Swap"); flags.append("reading-swap")
+    if stype == "studyhall" and priority == 2:
+        remarks.append("Study Hall swap"); flags.append("sh-swap")
+    if stype == "regular" and priority == 2:
+        flags.append("cp-fallback")
+    if is_cp(slot_val):
+        remarks.append("%s: Please reschedule or watch co-planning playback" % cover_teacher)
+        flags.append("cp-cover")
+    if ret_row is not None:
+        s_ret_val = schedules.get(sick_teacher, {}).get(ret_day, {}).get(ret_row)
+        if is_cp(s_ret_val):
+            remarks.append("%s: Please reschedule or watch co-planning playback" % sick_teacher)
+            flags.append("cp-return")
+    else:
+        remarks.append("Goodwill cover"); flags.append("goodwill")
+    return ("; ".join(remarks) if remarks else "/"), flags
+
+
 def assign_covers(sick_teacher, day_idx, schedules, excluded_today, sick_date=None):
     sick_sched = schedules.get(sick_teacher, {}).get(day_idx, {})
     if not sick_sched:
@@ -1067,30 +1103,14 @@ def assign_covers(sick_teacher, day_idx, schedules, excluded_today, sick_date=No
         if ret:
             ret_day, ret_row, ret_class, ret_occ, _ = ret
 
-        # ── remark ──
-        remarks, flags = [], []
-        if stype == "reading" and priority == 2:
-            remarks.append("Reading Swap"); flags.append("reading-swap")
-        if stype == "studyhall" and priority == 2:
-            remarks.append("Study Hall swap"); flags.append("sh-swap")
-        if stype == "regular" and priority == 2:
-            flags.append("cp-fallback")
-        if is_cp(slot_val):
-            remarks.append("%s: Please reschedule or watch co-planning playback" % cover_teacher)
-            flags.append("cp-cover")
-        if ret_row is not None:
-            s_ret_val = schedules.get(sick_teacher, {}).get(ret_day, {}).get(ret_row)
-            if is_cp(s_ret_val):
-                remarks.append("%s: Please reschedule or watch co-planning playback" % sick_teacher)
-                flags.append("cp-return")
-        else:
-            remarks.append("Goodwill cover"); flags.append("goodwill")
+        remark, flags = _remark(stype, priority, cover_teacher, slot_val,
+                                sick_teacher, ret_day, ret_row, schedules)
 
         assignments.append({
             "row": row_num, "lesson": lesson_label, "class": cls, "time": time_str,
             "cover": cover_teacher, "stype": stype, "priority": priority, "alts": alts,
             "ret_day": ret_day, "ret_row": ret_row, "ret_class": ret_class, "ret_occ": ret_occ,
-            "remark": "; ".join(remarks) if remarks else "/", "flags": flags,
+            "remark": remark, "flags": flags,
         })
 
     assignments.sort(key=lambda a: a["row"])
@@ -1237,16 +1257,120 @@ def _fmt(a, sick_teacher, sick_date, day_idx):
         "swap_lesson": str(ret_lesson) if ret_lesson else "",
         "swap_time": ret_time,
         "remark": a["remark"],
+        "row": a["row"],
+        "ret_key": ("%d|%d|%d" % (a["ret_day"], a["ret_row"], a["ret_occ"])
+                    if a["ret_day"] is not None else ""),
         "alts": a["alts"],
         "flags": flags,
         "stype": a["stype"],
     }
 
 
+# ── Row editor ───────────────────────────────────────────────────────────────
+# The results table lets you change the substitute teacher and the return slot by
+# hand. These three functions answer the dropdowns from the run that is already
+# loaded -- no files are re-read, and every choice is checked by the same rules
+# the planner uses.
+_CTX = {}
+
+
+def _slot_candidates(sick_teacher, row_num):
+    sched, day, used = _CTX["sched"], _CTX["day"], _CTX["excluded"]
+    cls = sched.get(sick_teacher, {}).get(day, {}).get(row_num)
+    stype = slot_type(row_num, day)
+    if stype == "reading":
+        cands, _ = find_reading_candidates(cls, day, sched, sick_teacher, used)
+    elif stype == "studyhall":
+        cands, _ = find_sh_candidates(cls, row_num, day, sched, sick_teacher, used)
+    else:
+        cands, _ = find_regular_candidates(cls, row_num, day, sched, sick_teacher, used)
+    return cls, stype, cands
+
+
+def cover_choices(sick_teacher, row_num):
+    """Every teacher allowed to cover this slot, best first."""
+    if not _CTX:
+        return []
+    cls, stype, cands = _slot_candidates(sick_teacher, row_num)
+    out = []
+    for tc, teacher, slot_val, prio in cands:
+        note = []
+        if prio == 2:
+            note.append("CP" if stype == "regular" else "swap")
+        if is_cp(slot_val) and prio != 2:
+            note.append("CP")
+        if teacher in VA_TEACHERS:
+            note.append("VA")
+        note.append("%d lesson%s" % (tc, "" if tc == 1 else "s"))
+        out.append({"t": teacher, "tier": prio, "note": " · ".join(note)})
+    return out
+
+
+def return_choices(sick_teacher, row_num, cover_teacher):
+    """Every valid return slot for that cover teacher, earliest first."""
+    if not _CTX or not cover_teacher:
+        return []
+    sched, day, sick_date = _CTX["sched"], _CTX["day"], _CTX["date"]
+    sick_sched = sched.get(sick_teacher, {}).get(day, {})
+    sick_classes = {v for v in sick_sched.values() if v and v != "CP"}
+    stype = slot_type(row_num, day)
+    out = []
+    for pen, rd, rr, rc, occ, dt in enumerate_returns(cover_teacher, stype, sick_teacher,
+                                                      day, sick_classes, sched, sick_date):
+        s_sched = sched.get(sick_teacher, {}).get(rd, {})
+        note = []
+        if counts_as_lesson(rr, rd):
+            same = count_same_class(s_sched, rd, rc)
+            if same:
+                note.append("%s %s lesson that day"
+                            % ({1: "2nd", 2: "3rd"}.get(same, "%dth" % (same + 1)), rc))
+        days = (dt - sick_date).days if dt else None
+        if days is not None and days > RETURN_WITHIN_DAYS:
+            note.append("LATE — %d days" % days)
+        if rc not in sick_classes:
+            note.append("not %s's own class" % sick_teacher)
+        if day_has_double_lesson(s_sched, rd):
+            note.append("double-lesson day")
+        out.append({
+            "key": "%d|%d|%d" % (rd, rr, occ),
+            "short": dt.strftime("%d/%m") if dt else DAY_NAMES[rd][:3],
+            "dayname": DAY_NAMES[rd],
+            "lesson": "Reading" if rr == 6 else str(ROW_TO_LESSON.get(rr, "")),
+            "cls": rc,
+            "note": " · ".join(note),
+        })
+    return out
+
+
+def rebuild_row(sick_teacher, row_num, cover_teacher, ret_key):
+    """Recompute one output row after a hand-picked cover or return slot."""
+    if not _CTX:
+        return None
+    sched, day, sick_date = _CTX["sched"], _CTX["day"], _CTX["date"]
+    cls, stype, cands = _slot_candidates(sick_teacher, row_num)
+    a = {"row": row_num,
+         "lesson": "Reading" if row_num == 6 else ROW_TO_LESSON.get(row_num, ""),
+         "class": cls, "time": LESSON_TIMES.get(row_num, ""),
+         "cover": cover_teacher or None, "stype": stype, "priority": None, "alts": [],
+         "ret_day": None, "ret_row": None, "ret_class": None, "ret_occ": 0,
+         "remark": "No cover available", "flags": ["nocover"]}
+    if not cover_teacher:
+        return _fmt(a, sick_teacher, sick_date, day)
+    a["priority"] = next((p for _, t, _, p in cands if t == cover_teacher), 2)
+    if ret_key:
+        rd, rr, occ = [int(x) for x in str(ret_key).split("|")]
+        a["ret_day"], a["ret_row"], a["ret_occ"] = rd, rr, occ
+        a["ret_class"] = sched.get(cover_teacher, {}).get(rd, {}).get(rr)
+    a["remark"], a["flags"] = _remark(stype, a["priority"], cover_teacher,
+                                      sched.get(cover_teacher, {}).get(day, {}).get(row_num),
+                                      sick_teacher, a["ret_day"], a["ret_row"], sched)
+    return _fmt(a, sick_teacher, sick_date, day)
+
+
 def run_swap(teachers_csv, date_str, exclude_csv="",
              mk_path=None, dh_path=None, tp_path=None, cal_path=None, roster_path=None,
              cross_path=None):
-    global SKIP_DATES, EXCLUDED_ALWAYS, VA_TEACHERS, SH_RESTRICTED, CROSS_CAMPUS
+    global SKIP_DATES, EXCLUDED_ALWAYS, VA_TEACHERS, SH_RESTRICTED, CROSS_CAMPUS, _CTX
     out = {"ok": True, "warnings": [], "teachers": [], "error": None}
     if not (mk_path or dh_path or tp_path):
         return {"ok": False, "error": "Please upload at least one campus timetable (MK, DH or TP).",
@@ -1344,6 +1468,11 @@ def run_swap(teachers_csv, date_str, exclude_csv="",
     excluded |= EXCLUDED_ALWAYS
     teachers = [t.strip().upper() for t in teachers_csv.split(",") if t.strip()]
     excluded |= set(teachers)   # sick teachers never cover each other
+
+    # Snapshot for the row editor: taken BEFORE the run consumes cover teachers, so a
+    # dropdown still offers someone already used elsewhere -- that clash is flagged,
+    # not hidden.
+    _CTX = {"sched": schedules, "day": day_idx, "date": sick_date, "excluded": set(excluded)}
 
     for sick_teacher in teachers:
         entry = {"teacher": sick_teacher, "rows": [], "newly_used": [], "note": None}
@@ -1538,22 +1667,21 @@ function render(r, teachers, date){
 
     h += '<div class="tablewrap"><table><thead><tr>';
     HEADERS.forEach((hd,i)=>{ h += '<th'+(i>=7?' class="grp2"':'')+'>'+hd+'</th>'; });
-    h += '<th class="grp2">Alternatives</th></tr></thead><tbody>';
-    for(const row of t.rows){
-      h += '<tr>';
+    h += '</tr></thead><tbody>';
+    t.rows.forEach((row,ri)=>{
+      h += '<tr data-t="'+esc(t.teacher)+'" data-i="'+ri+'">';
       KEYS.forEach((k,i)=>{
-        let v = row[k]||"";
-        let cls = "";
-        if(i===0||i===5||i===7||i===11) cls = "mono";
-        if(i===6) cls = (v==="NO COVER") ? "nocover" : "cover";
+        if(i===6){ h += '<td class="cover"><select class="pick selCover" aria-label="Substitute teacher"></select></td>'; return; }
+        if(i===7){ h += '<td><select class="pick selRet" aria-label="Return swap slot"></select></td>'; return; }
         if(i===12){ h += '<td class="rem">'+remarkCell(row)+'</td>'; return; }
-        h += '<td'+(cls?' class="'+cls+'"':'')+'>'+esc(v)+'</td>';
+        const cls = (i===0||i===5||i===11) ? "mono" : "";
+        h += '<td'+(cls?' class="'+cls+'"':'')+' data-k="'+k+'">'+esc(row[k]||"")+'</td>';
       });
-      h += '<td class="alts">'+esc((row.alts||[]).join(", ")||"—")+'</td>';
       h += '</tr>';
-    }
+    });
     h += '</tbody></table></div>';
-    if(t.newly_used.length) h += '<div class="rowmeta"><b>Covers used:</b> '+esc(t.newly_used.join(", "))+'</div>';
+    h += '<div class="rowmeta">Change the <b>Substitute Teacher</b> or <b>Swap Date</b> cell to override — the row updates and any clash is flagged.</div>';
+    h += '<div class="rowmeta" id="used-'+esc(t.teacher)+'"><b>Covers used:</b> '+esc(t.newly_used.join(", ")||"—")+'</div>';
     h += '<div class="copybar">'+
          '<button class="btn btn-ghost" onclick="copyTSV(\''+esc(t.teacher)+'\',false)">Copy '+esc(t.teacher)+'’s rows</button>'+
          '</div></div>';
@@ -1574,6 +1702,117 @@ function render(r, teachers, date){
   h += '</div>';
   el.innerHTML = h;
   window._lastResult = r;
+  fillPickers();
+  validateAll();
+}
+
+/* ── Row editor ────────────────────────────────────────────────────────
+   The dropdowns ask the engine for the same candidate lists the planner
+   used, so a hand-picked cover obeys every rule a computed one does.   */
+function py(fn, args){
+  args.forEach((v,i)=>pyodide.globals.set("_p"+(i+1), v===undefined?null:v));
+  const call = fn+"("+args.map((_,i)=>"_p"+(i+1)).join(",")+")";
+  return JSON.parse(pyodide.runPython("import json\njson.dumps("+call+")"));
+}
+function rowOf(tr){
+  const r = window._lastResult; if(!r||!tr) return null;
+  const t = r.teachers.find(x=>x.teacher===tr.dataset.t);
+  return t ? t.rows[+tr.dataset.i] : null;
+}
+function fillPickers(){
+  const r = window._lastResult; if(!r || typeof pyodide === "undefined") return;
+  document.querySelectorAll("#results tbody tr").forEach(tr=>{
+    const row = rowOf(tr); if(!row) return;
+    const sel = tr.querySelector("select.selCover"); if(!sel) return;
+    let opts = [];
+    try{ opts = py("cover_choices",[row.sick, row.row]); }catch(e){ opts = []; }
+    const cur = (row.cover==="NO COVER") ? "" : row.cover;
+    let html = opts.map(o=>'<option value="'+esc(o.t)+'">'+esc(o.t)+(o.note?' · '+esc(o.note):'')+'</option>').join("");
+    if(cur && !opts.some(o=>o.t===cur)) html = '<option value="'+esc(cur)+'">'+esc(cur)+'</option>' + html;
+    sel.innerHTML = html + '<option value="">— no cover —</option>';
+    sel.value = cur;
+    fillReturn(tr, row);
+  });
+}
+function fillReturn(tr, row){
+  const sel = tr.querySelector("select.selRet"); if(!sel) return;
+  let opts = [];
+  if(row.cover && row.cover!=="NO COVER"){
+    try{ opts = py("return_choices",[row.sick, row.row, row.cover]); }catch(e){ opts = []; }
+  }
+  sel.innerHTML = opts.map(o=>{
+    const lab = o.short+' '+o.dayname.slice(0,3)+' · '+(o.lesson==="Reading"?"Reading":"L"+o.lesson)+' '+o.cls
+              + (o.note ? ' — '+o.note : '');
+    return '<option value="'+esc(o.key)+'">'+esc(lab)+'</option>';
+  }).join("") + '<option value="">— goodwill (no return) —</option>';
+  sel.value = row.ret_key || "";
+  sel.disabled = (row.cover==="NO COVER");
+}
+function applyRow(tr, row){
+  tr.querySelectorAll("td[data-k]").forEach(td=>{ td.textContent = row[td.dataset.k]||""; });
+  const cv = tr.querySelector("td.cover");
+  if(cv) cv.className = (row.cover==="NO COVER") ? "nocover" : "cover";
+  const cs = tr.querySelector("select.selCover");
+  if(cs) cs.value = (row.cover==="NO COVER") ? "" : row.cover;
+  const rs = tr.querySelector("select.selRet");
+  if(rs) rs.value = row.ret_key || "";
+}
+document.addEventListener("change", function(ev){
+  const sel = ev.target;
+  if(!sel || !sel.classList || !sel.classList.contains("pick")) return;
+  const tr = sel.closest("tr"), row = rowOf(tr);
+  if(!row || typeof pyodide === "undefined") return;
+  const isCover = sel.classList.contains("selCover");
+  const cover = isCover ? sel.value : (row.cover==="NO COVER" ? "" : row.cover);
+  let key = isCover ? "" : sel.value;
+  try{
+    if(isCover && cover){
+      const opts = py("return_choices",[row.sick, row.row, cover]);
+      key = opts.length ? opts[0].key : "";          // earliest valid return
+    }
+    const fresh = py("rebuild_row",[row.sick, row.row, cover||null, key||null]);
+    if(!fresh) return;
+    Object.keys(fresh).forEach(k=>{ row[k] = fresh[k]; });
+  }catch(e){ alert("Could not update that row: "+e); return; }
+  tr.classList.add("edited");
+  applyRow(tr, row);
+  if(isCover) fillReturn(tr, row);
+  validateAll();
+});
+/* Clashes between rows are flagged, never blocked — you may have a reason. */
+function validateAll(){
+  const r = window._lastResult; if(!r) return;
+  const all = [], byCover = {}, byRetDay = {}, bySlot = {}, warn = {};
+  r.teachers.forEach(t=>t.rows.forEach((row,i)=>all.push({t:t.teacher, i:i, row:row})));
+  all.forEach(x=>{
+    const c = x.row.cover;
+    if(c && c!=="NO COVER") (byCover[c] = byCover[c]||[]).push(x);
+    if(x.row.swap_date){
+      if(x.row.stype==="regular"){
+        const k = x.row.sick+"|"+x.row.swap_date;
+        (byRetDay[k] = byRetDay[k]||[]).push(x);
+      }
+      const s = x.row.sick+"|"+x.row.swap_date+"|"+x.row.swap_lesson;
+      (bySlot[s] = bySlot[s]||[]).push(x);
+    }
+  });
+  const add = (x,msg)=>{ const k=x.t+"|"+x.i; (warn[k]=warn[k]||[]).push(msg); };
+  Object.keys(byCover).forEach(c=>{ if(byCover[c].length>1) byCover[c].forEach(x=>add(x, c+" covers "+byCover[c].length+" lessons")); });
+  Object.keys(byRetDay).forEach(k=>{ if(byRetDay[k].length>1) byRetDay[k].forEach(x=>add(x, "2 lesson returns on "+k.split("|")[1])); });
+  Object.keys(bySlot).forEach(k=>{ if(bySlot[k].length>1) bySlot[k].forEach(x=>add(x, "two returns in the same slot")); });
+  all.forEach(x=>{
+    const tr = document.querySelector('#results tbody tr[data-t="'+x.t+'"][data-i="'+x.i+'"]');
+    if(!tr) return;
+    const cell = tr.querySelector("td.rem"); if(!cell) return;
+    const w = warn[x.t+"|"+x.i];
+    cell.innerHTML = (w ? '<span class="tag bad">⚠ '+esc(w.join(" · "))+'</span>' : "") + remarkCell(x.row);
+  });
+  r.teachers.forEach(t=>{
+    const el = document.getElementById("used-"+t.teacher); if(!el) return;
+    const used = [];
+    t.rows.forEach(row=>{ if(row.cover && row.cover!=="NO COVER" && used.indexOf(row.cover)<0) used.push(row.cover); });
+    el.innerHTML = '<b>Covers used:</b> '+esc(used.sort().join(", ")||"—");
+  });
 }
 
 /* ── Excel-ready copy ──────────────────────────────────────────────── */
