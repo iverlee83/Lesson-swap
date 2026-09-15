@@ -255,7 +255,10 @@
             <li>All of a sick teacher's returns are chosen <b>together</b> (lowest total
                 penalty), not one slot at a time</li>
             <li>Every row is <b>editable</b>: the Substitute Teacher and Swap Date cells are
-                dropdowns. Changing the cover re-picks the earliest valid return automatically;
+                dropdowns. Each option shows the day it would create — <b>lessons now → after,
+                against that day's cap</b>, and how many of that class it would make — and the
+                option the app itself chose is marked <b>★ app's pick</b>.
+                Changing the cover re-picks the earliest valid return automatically;
                 a clash with another row (same teacher covering twice, two lesson returns on one
                 date) is flagged in the Remark column but never blocked</li>
             <li>A <b>Study Hall return</b> can be any of the cover teacher's Study Halls —
@@ -276,7 +279,7 @@
 
 <script type="text/x-python" id="pycore">
 """
-St. Hilary's School — Lesson Swap engine (v16)
+St. Hilary's School — Lesson Swap engine (v17)
 Rules source: Lesson_Swap_Rules.md + confirmed manual-output feedback.
 
 v12 changes vs v11:
@@ -1287,22 +1290,36 @@ def _slot_candidates(sick_teacher, row_num):
     return cls, stype, cands
 
 
+def _ordinal(n):
+    return {1: "1st", 2: "2nd", 3: "3rd"}.get(n, "%dth" % n)
+
+
 def cover_choices(sick_teacher, row_num):
-    """Every teacher allowed to cover this slot, best first."""
+    """Every teacher allowed to cover this slot, best first, with the day this
+    cover would give them: lessons now -> after, against the cap, and how many
+    of that class it would make."""
     if not _CTX:
         return []
+    day = _CTX["day"]
     cls, stype, cands = _slot_candidates(sick_teacher, row_num)
+    adds = 1 if counts_as_lesson(row_num, day) else 0
     out = []
     for tc, teacher, slot_val, prio in cands:
-        note = []
+        tags = []
         if prio == 2:
-            note.append("CP" if stype == "regular" else "swap")
+            tags.append("CP" if stype == "regular" else "swap")
         if is_cp(slot_val) and prio != 2:
-            note.append("CP")
+            tags.append("CP")
         if teacher in VA_TEACHERS:
-            note.append("VA")
-        note.append("%d lesson%s" % (tc, "" if tc == 1 else "s"))
-        out.append({"t": teacher, "tier": prio, "note": " · ".join(note)})
+            tags.append("VA")
+        sched = _CTX["sched"].get(teacher, {}).get(day, {})
+        now = count_lessons(sched, day)
+        same = count_same_class(sched, day, cls) if (adds and cls) else 0
+        out.append({
+            "t": teacher, "tier": prio, "tags": " · ".join(tags),
+            "now": now, "after": now + adds, "cap": MAX_LESSONS[day],
+            "same": ("%s %s lesson" % (_ordinal(same + 1), cls)) if adds and cls else "",
+        })
     return out
 
 
@@ -1331,8 +1348,11 @@ def return_choices(sick_teacher, row_num, cover_teacher):
             note.append("not %s's own class" % sick_teacher)
         if day_has_double_lesson(s_sched, rd):
             note.append("double-lesson day")
+        now = count_lessons(s_sched, rd)
+        adds = 1 if counts_as_lesson(rr, rd) else 0
         out.append({
             "key": "%d|%d|%d" % (rd, rr, occ),
+            "now": now, "after": now + adds, "cap": MAX_LESSONS[rd],
             "short": dt.strftime("%d/%m") if dt else DAY_NAMES[rd][:3],
             "dayname": DAY_NAMES[rd],
             "lesson": "Reading" if rr == 6 else str(ROW_TO_LESSON.get(rr, "")),
@@ -1727,7 +1747,8 @@ function fillPickers(){
     let opts = [];
     try{ opts = py("cover_choices",[row.sick, row.row]); }catch(e){ opts = []; }
     const cur = (row.cover==="NO COVER") ? "" : row.cover;
-    let html = opts.map(o=>'<option value="'+esc(o.t)+'">'+esc(o.t)+(o.note?' · '+esc(o.note):'')+'</option>').join("");
+    if(row.auto_cover===undefined){ row.auto_cover = cur; row.auto_ret = row.ret_key||""; }
+    let html = opts.map(o=>'<option value="'+esc(o.t)+'">'+esc(coverLabel(o, o.t===row.auto_cover))+'</option>').join("");
     if(cur && !opts.some(o=>o.t===cur)) html = '<option value="'+esc(cur)+'">'+esc(cur)+'</option>' + html;
     sel.innerHTML = html + '<option value="">— no cover —</option>';
     sel.value = cur;
@@ -1740,13 +1761,31 @@ function fillReturn(tr, row){
   if(row.cover && row.cover!=="NO COVER"){
     try{ opts = py("return_choices",[row.sick, row.row, row.cover]); }catch(e){ opts = []; }
   }
-  sel.innerHTML = opts.map(o=>{
-    const lab = o.short+' '+o.dayname.slice(0,3)+' · '+(o.lesson==="Reading"?"Reading":"L"+o.lesson)+' '+o.cls
-              + (o.note ? ' — '+o.note : '');
-    return '<option value="'+esc(o.key)+'">'+esc(lab)+'</option>';
-  }).join("") + '<option value="">— goodwill (no return) —</option>';
+  const sameCover = (row.cover===row.auto_cover);
+  sel.innerHTML = opts.map(o=>
+    '<option value="'+esc(o.key)+'">'+esc(returnLabel(o, sameCover && o.key===row.auto_ret))+'</option>'
+  ).join("") + '<option value="">— goodwill (no return) —</option>';
   sel.value = row.ret_key || "";
   sel.disabled = (row.cover==="NO COVER");
+}
+/* "3 → 4 lessons (max 6)" — what the day becomes if this option is taken. */
+function loadLabel(o){
+  const unit = n => n+" lesson"+(n===1?"":"s");
+  return (o.after>o.now ? o.now+" → "+unit(o.after) : unit(o.now)) + " (max "+o.cap+")";
+}
+const PICK = "  ★ app's pick";
+function coverLabel(o, isPick){
+  const bits = [];
+  if(o.tags) bits.push(o.tags);
+  bits.push(loadLabel(o));
+  if(o.same) bits.push(o.same);
+  return o.t+" · "+bits.join(" · ")+(isPick?PICK:"");
+}
+function returnLabel(o, isPick){
+  const head = o.short+" "+o.dayname.slice(0,3)+" · "+(o.lesson==="Reading"?"Reading":"L"+o.lesson)+" "+o.cls;
+  const bits = [loadLabel(o)];
+  if(o.note) bits.push(o.note);
+  return head+" — "+bits.join(" · ")+(isPick?PICK:"");
 }
 function applyRow(tr, row){
   tr.querySelectorAll("td[data-k]").forEach(td=>{ td.textContent = row[td.dataset.k]||""; });
