@@ -205,7 +205,10 @@
         <div>
           <h4>Cover</h4>
           <ul>
-            <li>Cover teacher must teach the <b>same class</b> that day</li>
+            <li>Cover teacher must teach the <b>same class at some point in the week</b> —
+                the weekday doesn't matter, they are stepping in. Teachers who already have
+                that class on the day itself rank lower, so a cover doesn't create a double
+                or triple of one class</li>
             <li>Their slot must be <b>free or CP</b></li>
             <li>Must still have <b>≥ 3 free/CP</b> periods after covering</li>
             <li>Daily lesson cap: <b>max 4</b> lessons Mon/Tue/Thu · <b>max 6</b> Wed/Fri
@@ -241,7 +244,8 @@
                 Also used when the only same-class teacher is already covering another
                 of the sick teacher's lessons (e.g. a Chinese double lesson) — that slot
                 falls back to CP rather than being left uncovered</li>
-            <li>Return = same slot type, different day, sick teacher free/CP, ≥ 3 free left</li>
+            <li>Return = same slot type, different day, sick teacher free/CP, ≥ 3 free left.
+                The class may be <b>any class the sick teacher teaches that week</b></li>
             <li>Returns are placed on the <b>earliest date the rules allow</b> — every day of
                 delay counts against a slot, so a valid Wednesday beats an equally valid
                 Monday the following week</li>
@@ -279,7 +283,7 @@
 
 <script type="text/x-python" id="pycore">
 """
-St. Hilary's School — Lesson Swap engine (v17)
+St. Hilary's School — Lesson Swap engine (v18)
 Rules source: Lesson_Swap_Rules.md + confirmed manual-output feedback.
 
 v12 changes vs v11:
@@ -715,12 +719,22 @@ def _base_ok(teacher, sick_teacher, used):
 
 
 # ── Candidate finding ────────────────────────────────────────────────────────
+def classes_taught(teacher, schedules):
+    """Every class a teacher takes during the week. Cover and return swaps go by this,
+    not by the one day in question -- the teacher is stepping in, not continuing their
+    own day, so it does not matter which weekday they normally take the class."""
+    return {v for day in schedules.get(teacher, {}).values()
+            for v in day.values() if v and v != "CP"}
+
+
 def find_regular_candidates(cls, row_num, day_idx, schedules, sick_teacher, used):
     """
     Regular lesson cover.
-    P1: teacher teaches `cls` somewhere that day AND is free/CP in this slot.
+    P1: teacher teaches `cls` at some point in the WEEK and is free/CP in this slot.
+        A teacher who already has that class on the day itself ranks lower, so a cover
+        does not hand anyone a double (or triple) of one class.
     P2 (CP fallback, last resort): any teacher whose slot value is CP.
-    Returns (candidates, priority) where candidate = (teaching_count, teacher, slot_value)
+    Returns (candidates, priority) where candidate = (teaching_count, teacher, slot_value, tier)
     """
     p1, p2 = [], []
     campus = lesson_campus(sick_teacher, day_idx, row_num)
@@ -738,16 +752,18 @@ def find_regular_candidates(cls, row_num, day_idx, schedules, sick_teacher, used
         if not lesson_cap_ok(sched, day_idx, row_num):
             continue
         tc = count_teaching(sched, day_idx)
-        if any(v == cls for v in sched.values()):
-            p1.append((tc, teacher, slot_val))
+        if cls and cls in classes_taught(teacher, schedules):
+            p1.append((count_same_class(sched, day_idx, cls), tc, teacher, slot_val))
         elif is_cp(slot_val):
-            p2.append((tc, teacher, slot_val))
-    va_key = lambda c: (c[1] in VA_TEACHERS, c[0], c[1])
+            p2.append((0, tc, teacher, slot_val))
+    # VA last, then fewest lessons of that class already that day, then lightest day.
+    va_key = lambda c: (c[2] in VA_TEACHERS, c[0], c[1], c[2])
     p1.sort(key=va_key)
     p2.sort(key=va_key)
     # Both tiers are returned (P1 first, each tagged with its tier) so the joint search
     # can fall back to a P2 cover when the only P1 teacher is already taken by another slot.
-    return [(tc, t, v, 1) for tc, t, v in p1] + [(tc, t, v, 2) for tc, t, v in p2], (1 if p1 else 2)
+    return ([(tc, t, v, 1) for _, tc, t, v in p1] + [(tc, t, v, 2) for _, tc, t, v in p2],
+            1 if p1 else 2)
 
 
 def find_reading_candidates(cls, day_idx, schedules, sick_teacher, used):
@@ -965,7 +981,7 @@ def assign_covers(sick_teacher, day_idx, schedules, excluded_today, sick_date=No
     sick_sched = schedules.get(sick_teacher, {}).get(day_idx, {})
     if not sick_sched:
         return None
-    sick_classes = {v for v in sick_sched.values() if v and v != "CP"}
+    sick_classes = classes_taught(sick_teacher, schedules)
 
     slots = []
     for row_num in ACTIVE_ROWS[day_idx]:
@@ -1328,8 +1344,7 @@ def return_choices(sick_teacher, row_num, cover_teacher):
     if not _CTX or not cover_teacher:
         return []
     sched, day, sick_date = _CTX["sched"], _CTX["day"], _CTX["date"]
-    sick_sched = sched.get(sick_teacher, {}).get(day, {})
-    sick_classes = {v for v in sick_sched.values() if v and v != "CP"}
+    sick_classes = classes_taught(sick_teacher, sched)
     stype = slot_type(row_num, day)
     out = []
     for pen, rd, rr, rc, occ, dt in enumerate_returns(cover_teacher, stype, sick_teacher,
