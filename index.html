@@ -285,7 +285,7 @@
 
 <script type="text/x-python" id="pycore">
 """
-St. Hilary's School — Lesson Swap engine (v19)
+St. Hilary's School — Lesson Swap engine (v19.1)
 Rules source: Lesson_Swap_Rules.md + confirmed manual-output feedback.
 
 v12 changes vs v11:
@@ -1357,6 +1357,7 @@ def return_choices(sick_teacher, row_num, cover_teacher):
         return []
     sched, day, sick_date = _CTX["sched"], _CTX["day"], _CTX["date"]
     sick_classes = classes_taught(sick_teacher, sched)
+    cls = sched.get(sick_teacher, {}).get(day, {}).get(row_num)   # the class being covered
     stype = slot_type(row_num, day)
     out = []
     for pen, rd, rr, rc, occ, dt in enumerate_returns(cover_teacher, stype, sick_teacher,
