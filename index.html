@@ -28,6 +28,9 @@
   header .sub{font-size:12px;opacity:.75;margin-top:2px;}
   #engineStatus{font-size:12px;background:rgba(255,255,255,.12);padding:5px 12px;
                 border-radius:99px;white-space:nowrap;}
+  .hdr-right{display:flex;flex-direction:column;align-items:flex-end;gap:7px;}
+  #appVersion{font-size:11.5px;font-weight:700;letter-spacing:.03em;color:var(--gold);
+              font-variant-numeric:tabular-nums;white-space:nowrap;}
 
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
         padding:20px 22px;margin-bottom:18px;box-shadow:var(--shadow);}
@@ -141,7 +144,10 @@
       <h1>St. Hilary's School <span>· Lesson Swap</span></h1>
       <div class="sub">MK, DH &amp; TP campus cover and return-swap planner</div>
     </div>
-    <div id="engineStatus">Engine: idle</div>
+    <div class="hdr-right">
+      <div id="appVersion" title="App version">v?</div>
+      <div id="engineStatus">Engine: idle</div>
+    </div>
   </header>
 
   <div class="card">
@@ -285,7 +291,8 @@
 
 <script type="text/x-python" id="pycore">
 """
-St. Hilary's School — Lesson Swap engine (v19.1)
+St. Hilary's School — Lesson Swap engine (v20)
+Released: 24 Sep 2026
 Rules source: Lesson_Swap_Rules.md + confirmed manual-output feedback.
 
 v12 changes vs v11:
@@ -1591,6 +1598,21 @@ async function delFile(key){
   if(!confirm("Delete the stored "+SLOTS[key]+"?")) return;
   await idbDel(key); refreshSlot(key);
 }
+
+/* ── Version badge ─────────────────────────────────────────────────────
+   Read from the engine header ("Lesson Swap engine (vNN)" / "Released: …")
+   so the number shown can never drift from the code actually running.   */
+function showVersion(){
+  const src = (document.getElementById("pycore")||{}).textContent || "";
+  const v = (src.match(/Lesson Swap engine \((v[\d.]+)\)/)||[])[1] || "v?";
+  const d = ((src.match(/Released:\s*([^\n]+)/)||[])[1] || "").trim();
+  const el = document.getElementById("appVersion");
+  if(!el) return;
+  el.textContent = v + (d ? " · " + d : "");
+  el.title = "Lesson Swap " + v + (d ? ", released " + d : "");
+}
+if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", showVersion);
+else showVersion();
 
 /* ── Pyodide engine ────────────────────────────────────────────────── */
 let pyodide=null, coreLoaded=false;
