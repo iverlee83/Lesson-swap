@@ -114,6 +114,26 @@
   .edited select.pick{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-soft);}
   .alts{font-size:11px;color:var(--muted);}
   .rowmeta{font-size:11.5px;color:var(--muted);margin-top:8px;}
+  .field input.short{min-width:170px;}
+  .partrow{display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-top:12px;}
+  .chk{font-size:12.5px;font-weight:600;color:var(--navy);display:inline-flex;gap:7px;align-items:center;cursor:pointer;}
+  .chk input{width:15px;height:15px;accent-color:var(--navy);}
+  .hint-inline{font-size:11.5px;color:var(--muted);}
+  #partWrap{margin-top:8px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#f8fafc;}
+  .pday{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:7px 0;font-size:12.5px;}
+  .pday b{min-width:120px;color:var(--navy);}
+  .pday .none{color:#9aa7b8;font-style:italic;}
+  .chip{display:inline-flex;gap:5px;align-items:center;border:1px solid #c2cddb;border-radius:99px;
+        padding:3px 10px;background:#fff;cursor:pointer;font-size:12px;}
+  .chip:has(input:checked){background:var(--gold-soft);border-color:var(--gold);}
+  .btn-xs{padding:3px 9px;font-size:11px;margin-left:4px;}
+  .dayhdr{font-size:13px;font-weight:800;color:#fff;background:var(--navy-2);border-radius:8px;
+          padding:7px 12px;margin:18px 0 12px;letter-spacing:.02em;}
+  .daylab{font-size:12px;color:var(--muted);font-weight:600;}
+  th.fixc,td.fixc{width:30px;text-align:center;padding-left:5px;padding-right:5px;}
+  td.fixc input{width:15px;height:15px;accent-color:var(--gold);cursor:pointer;}
+  tr.fixedrow td{background:#fffbea!important;}
+  .banner.info{background:#eef4fb;border-color:#c7d8ee;color:var(--navy-2);}
 
   .copybar{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-top:11px;}
   textarea.tsv{width:100%;height:120px;margin-top:10px;font-family:ui-monospace,Menlo,Consolas,monospace;
@@ -135,7 +155,7 @@
   footer{text-align:center;font-size:11px;color:#98a5b6;margin:22px 0 0;}
   @media print{
     body{background:#fff;padding:0;} .card:first-of-type,header #engineStatus,
-    .copybar,textarea.tsv,#spinner,details.rules{display:none!important;}
+    .copybar,textarea.tsv,#spinner,details.rules,.fixc,.partrow,#partWrap{display:none!important;}
     select.pick{border:none;appearance:none;-webkit-appearance:none;background:transparent;
       padding:0;max-width:none;box-shadow:none;}
     .card{box-shadow:none;border:none;} .tablewrap{border:1px solid #ccc;}
@@ -195,6 +215,12 @@
         <button class="btn btn-up" onclick="pickFile('cross')">Upload</button>
         <button class="btn btn-del" onclick="delFile('cross')" disabled>Delete</button>
       </div>
+      <div class="fslot" id="slot-log">
+        <h3>Substitution Log</h3><div class="req">Optional · the lesson substitution output (sheets "Combined" + "Balance"). Swaps in it count as booked; its Balance decides goodwill covers. <b>Add to log</b> keeps it up to date.</div>
+        <div class="meta"><span class="none">No file uploaded</span></div>
+        <button class="btn btn-up" onclick="pickFile('log')">Upload</button>
+        <button class="btn btn-del" onclick="delFile('log')" disabled>Delete</button>
+      </div>
     </div>
     <div class="hint">Files stay in this browser until you replace or delete them. Nothing is uploaded anywhere.</div>
   </div>
@@ -204,11 +230,21 @@
     <div class="form-row">
       <div class="field"><label>Sick teacher(s)</label>
         <input id="inTeachers" placeholder="e.g. LWT  or  LWT, NB"></div>
-      <div class="field"><label>Sick date</label>
+      <div class="field"><label>Sick date (from)</label>
         <input id="inDate" type="date"></div>
+      <div class="field"><label>To (multi-day, optional)</label>
+        <input id="inDateTo" type="date" class="short"></div>
       <div class="field"><label>Also exclude (optional)</label>
         <input id="inExclude" placeholder="e.g. DF, LCF"></div>
       <button class="btn btn-run" id="btnRun" onclick="run()">Arrange swaps</button>
+    </div>
+    <div class="partrow">
+      <label class="chk"><input type="checkbox" id="inPart" onchange="togglePart()"> Part-day absence — choose which lessons need cover</label>
+      <span class="hint-inline">Leave <b>To</b> blank for a single day. A range is planned day by day, skipping holidays.</span>
+    </div>
+    <div id="partWrap" style="display:none">
+      <div id="partBox"></div>
+      <button class="btn btn-ghost btn-xs" onclick="loadPartDay()">Load lessons</button>
     </div>
     <div id="spinner">⏳ <span id="spinnerTxt">Working…</span></div>
     <details class="rules">
@@ -292,6 +328,30 @@
             <li>No valid return → <b>Goodwill cover</b></li>
           </ul>
         </div>
+        <div>
+          <h4>Log, absences &amp; output</h4>
+          <ul>
+            <li><b>Substitution log</b> (optional upload): swaps already in it are treated as
+                booked on their dates — a teacher covering or taking a lesson back that day isn't
+                free in that slot, it counts toward their lesson cap, and a sick teacher who
+                already has a lesson return on a date gets no second one there. Rows for the same
+                teacher and date you are planning again are ignored (and flagged)</li>
+            <li><b>Goodwill fairness</b> (log only): when a cover can't be repaid, the teacher
+                with the highest <b>Balance</b> (being covered − help covered − official; rows
+                with Cover = 1) is asked first, then the one with the <b>fewest lessons that day</b>.
+                Swaps are not affected. VA teachers stay last resort</li>
+            <li><b>Multi-day</b>: fill in <b>To</b>. Each school day is planned in turn and sees
+                the swaps already arranged on earlier days; no return falls on a day the teacher is
+                still away, and returns may use a third week (still tagged LATE)</li>
+            <li><b>Part-day</b>: tick it, load the lessons and untick the ones the teacher will
+                still teach</li>
+            <li><b>📌 Fix + Re-plan</b>: a row you change by hand is fixed; tick 📌 on any other
+                row to keep it, then <b>Re-plan the rest</b> re-plans only the unfixed rows</li>
+            <li><b>Slips (PDF)</b>: substitution + swap-back notices (goodwill = cover notice).
+                <b>Add to log (Excel)</b>: appends the rows at the first empty row of
+                Combined (Cover = 1 on goodwill rows) or starts a new 2627 log</li>
+          </ul>
+        </div>
       </div>
     </details>
   </div>
@@ -302,9 +362,23 @@
 
 <script type="text/x-python" id="pycore">
 """
-St. Hilary's School — Lesson Swap engine (v22)
+St. Hilary's School — Lesson Swap engine (v23)
 Released: 25 Sep 2026
 Rules source: Lesson_Swap_Rules.md + confirmed manual-output feedback.
+
+v23 changes vs v22:
+  * SUBSTITUTION LOG upload (Combined + Balance sheets). Swaps already in the log are
+    treated as booked on their dates: a teacher covering, or taking a lesson back, on a
+    date is not free in that slot, it counts toward their lesson cap, and a sick teacher
+    with a lesson return already on a date gets no second one there.
+  * GOODWILL FAIRNESS (log only): when a cover can't be repaid, the teacher with the
+    highest Balance (owes the most goodwill) is asked first, then the one with the fewest
+    lessons that day. Swaps are not affected.
+  * MULTI-DAY absences: a date range is planned day by day; later days see the earlier
+    days' swaps, and no return lands on a day the sick teacher is still away.
+  * PART-DAY absences: only the ticked lessons are covered.
+  * FIX + RE-PLAN: hand-fixed rows are kept as given and the rest re-planned around them.
+  * Excel: rows are appended to the log (Cover = 1 on goodwill rows) or a new 2627 log.
 
 v12 changes vs v11:
   * SAME-CLASS STACKING: a return that would give the sick teacher 3+ lessons of the same
@@ -374,6 +448,8 @@ v5 changes vs the previous app engine:
 
 import re as _re
 import datetime as _dt
+import copy as _copy
+import json
 from datetime import datetime, timedelta
 import openpyxl
 
@@ -458,6 +534,62 @@ LESSON_CAMPUS = {}        # teacher -> day_idx -> row -> campus
 TEACHER_HOME = {}         # teacher -> {campus}: every timetable the teacher appears in
 TEACHER_CAMPUS_DAYS = {}  # teacher -> day_idx -> {campus}: timetables with an entry that day
 CROSS_CAMPUS = {}         # teacher -> day_idx -> {campus} (empty set = split day, unavailable)
+
+# ── Dated bookings (v23) ─────────────────────────────────────────────────────
+# The weekly timetable says what a teacher normally does; these say what is already
+# arranged on a particular DATE -- swaps in the uploaded substitution log, and rows
+# planned earlier in this run (a multi-day absence is planned one day at a time).
+LOG_LOADED = False
+LOG_ENTRIES = []          # every usable row of the uploaded log (see parse_log)
+LOG_ACTIVE = []           # LOG_ENTRIES minus rows this run is re-planning
+LOG_BAL = {}              # teacher -> Balance (being covered - help covered - official)
+PLAN_ENTRIES = []         # rows planned in this run (kept in step with the editor)
+ABSENT = {}               # teacher -> {date}: dates they are away (this run + log)
+BOOKED = {}               # (teacher, date) -> {row: class} extra lessons on that date
+BOOKED_RET = set()        # (teacher, date): already has a LESSON return that date
+BOOKED_COVER = {}         # date -> {teacher}: already covering someone that date
+RET_BASE = None           # plain weekly schedules (no dated overlay) for return days
+CUR_SKIP_EXTRA = set()    # dates the current sick teacher is away -- no returns there
+
+
+def _build_booked(skip=None):
+    """Rebuild the dated bookings from the log and this run's plan. `skip` =
+    (sick_teacher, date): leave out that teacher-day's own rows (they're being edited)."""
+    global BOOKED, BOOKED_RET, BOOKED_COVER
+    BOOKED, BOOKED_RET, BOOKED_COVER = {}, set(), {}
+    for e in LOG_ACTIVE + PLAN_ENTRIES:
+        if skip and (e["sick"], e["date"]) == skip:
+            continue
+        if e["cover"] and e["row"]:
+            BOOKED.setdefault((e["cover"], e["date"]), {})[e["row"]] = e["cls"] or "COVER"
+            BOOKED_COVER.setdefault(e["date"], set()).add(e["cover"])
+        if e["rdate"] and e["rrow"]:
+            BOOKED.setdefault((e["sick"], e["rdate"]), {})[e["rrow"]] = e["rcls"] or "SWAP"
+            if e["rdate"].weekday() < 5 and counts_as_lesson(e["rrow"], e["rdate"].weekday()):
+                BOOKED_RET.add((e["sick"], e["rdate"]))
+
+
+def _dated(teacher, day_idx, date, base):
+    """A teacher's timetable for one weekday, with anything booked on `date` laid on top."""
+    s = base.get(teacher, {}).get(day_idx, {})
+    b = BOOKED.get((teacher, date)) if date is not None else None
+    if b:
+        s = dict(s)
+        s.update(b)
+    return s
+
+
+def _overlay_day(base, day_idx, date):
+    """Copy of the schedules where every teacher's `day_idx` holds that date's bookings."""
+    out = dict(base)
+    for (t, d), rows in BOOKED.items():
+        if d == date and t in base:
+            wk = dict(base[t])
+            day = dict(wk.get(day_idx, {}))
+            day.update(rows)
+            wk[day_idx] = day
+            out[t] = wk
+    return out
 
 
 def lesson_campus(teacher, day_idx, row):
@@ -743,6 +875,8 @@ def classes_taught(teacher, schedules):
     """Every class a teacher takes during the week. Cover and return swaps go by this,
     not by the one day in question -- the teacher is stepping in, not continuing their
     own day, so it does not matter which weekday they normally take the class."""
+    if RET_BASE is not None:          # ignore dated bookings: a cover isn't "their" class
+        schedules = RET_BASE
     return {v for day in schedules.get(teacher, {}).values()
             for v in day.values() if v and v != "CP"}
 
@@ -869,6 +1003,8 @@ P_SOON_PER_DAY = 200             # every day of delay costs this -- returns land
 P_SH_ANY, P_DOUBLE, P_RANK, P_SAME = 300, 100, 30, 10
 PREFER_DAY = [2, 3, 4, 1, 0]     # house order: Wed, Thu, Fri, Tue, Mon
 RETURN_OCCURRENCES = 2           # look at the first TWO dates of each weekday (e.g. both Mondays)
+RETURN_OCC_MULTI = 3             # multi-day absence: three, so the 3rd week (still inside the
+                                 # 3-week ceiling) can take returns the first two weeks can't
 SAME_WEEKDAY_RETURNS = True      # a later date of the sick weekday (next Friday) is a valid
                                  # return day; switched off only on a make-up timetable day,
                                  # when that weekday's timetable has been rewritten in memory
@@ -893,8 +1029,8 @@ def enumerate_returns(cover_teacher, cover_slot_type, sick_teacher, day_idx,
     class is preferred, but any of the cover teacher's Study Halls is accepted rather
     than falling to a Goodwill cover.
     """
-    sick_sched = schedules.get(sick_teacher, {})
-    cover_sched = schedules.get(cover_teacher, {})
+    base = RET_BASE if RET_BASE is not None else schedules
+    cover_away = ABSENT.get(cover_teacher, ())
 
     # (weekday, occurrence) -> (date, lateness penalty). Without a sick date we can't
     # place dates, so fall back to weekday-only with no lateness.
@@ -922,8 +1058,11 @@ def enumerate_returns(cover_teacher, cover_slot_type, sick_teacher, day_idx,
 
     best = {}
     for ret_day, occ, rd, late_pen in dates:
-        s_sched = sick_sched.get(ret_day, {})
-        c_sched = cover_sched.get(ret_day, {})
+        if rd is not None and rd in cover_away:
+            continue                                # the cover teacher is away that date
+        s_sched = _dated(sick_teacher, ret_day, rd, base)
+        c_sched = base.get(cover_teacher, {}).get(ret_day, {})
+        c_booked = BOOKED.get((cover_teacher, rd), {}) if rd is not None else {}
         if not s_sched or not c_sched:
             continue
         active = ACTIVE_ROWS[ret_day]
@@ -942,6 +1081,8 @@ def enumerate_returns(cover_teacher, cover_slot_type, sick_teacher, day_idx,
             cov_val = c_sched.get(ret_row)
             if not cov_val or cov_val == "CP":
                 continue                            # nothing to hand back here
+            if ret_row in c_booked:
+                continue                            # that slot is already re-arranged that date
             if not at_campus(sick_teacher, ret_day, lesson_campus(cover_teacher, ret_day, ret_row)):
                 continue                            # sick teacher isn't at that campus that day
             own_class = cov_val in sick_classes
@@ -983,7 +1124,7 @@ def return_date(base_date, ret_day_idx, occurrence):
     hits = 0
     limit = base_date + timedelta(days=90)
     while d <= limit:
-        if d.weekday() == ret_day_idx and d not in SKIP_DATES:
+        if d.weekday() == ret_day_idx and d not in SKIP_DATES and d not in CUR_SKIP_EXTRA:
             if hits == occurrence:
                 return d
             hits += 1
@@ -991,7 +1132,7 @@ def return_date(base_date, ret_day_idx, occurrence):
     # fall back to the first available
     d = base_date + timedelta(days=1)
     while d <= limit:
-        if d.weekday() == ret_day_idx and d not in SKIP_DATES:
+        if d.weekday() == ret_day_idx and d not in SKIP_DATES and d not in CUR_SKIP_EXTRA:
             return d
         d += timedelta(days=1)
     return None
@@ -1021,11 +1162,20 @@ def _remark(stype, priority, cover_teacher, slot_val, sick_teacher, ret_day, ret
     return ("; ".join(remarks) if remarks else "/"), flags
 
 
-def assign_covers(sick_teacher, day_idx, schedules, excluded_today, sick_date=None):
+def assign_covers(sick_teacher, day_idx, schedules, excluded_today, sick_date=None,
+                  only_rows=None, fixed=None):
+    """
+    only_rows: part-day absence -- cover just these rows (None = the whole day).
+    fixed:     {row: (cover_teacher or None, "day|row|occ" or None)} -- rows the user has
+               fixed by hand; they are kept exactly as given and the rest are re-planned
+               around them.
+    """
     sick_sched = schedules.get(sick_teacher, {}).get(day_idx, {})
     if not sick_sched:
         return None
     sick_classes = classes_taught(sick_teacher, schedules)
+    fixed = fixed or {}
+    ret_base = RET_BASE if RET_BASE is not None else schedules
 
     slots = []
     for row_num in ACTIVE_ROWS[day_idx]:
@@ -1036,6 +1186,8 @@ def assign_covers(sick_teacher, day_idx, schedules, excluded_today, sick_date=No
             continue
         if row_num == 6 and day_idx == 4:       # Friday assembly — no Reading
             continue
+        if only_rows is not None and row_num not in only_rows:
+            continue                            # part-day: the teacher is in for this one
         slots.append((row_num, val, slot_type(row_num, day_idx)))
 
     used = set(excluded_today)
@@ -1052,34 +1204,67 @@ def assign_covers(sick_teacher, day_idx, schedules, excluded_today, sick_date=No
     for row_num, cls, stype in slots:
         c, _ = candidates_for(row_num, cls, stype, used)
         counts[(row_num, cls, stype)] = len(c)
-    ordered = sorted(slots, key=lambda s: counts[(s[0], s[1], s[2])])
+    # Fixed rows go first so everything else is planned around them.
+    ordered = sorted(slots, key=lambda s: (s[0] not in fixed, counts[(s[0], s[1], s[2])]))
 
     # ── Build the option list for every slot ──────────────────────────────
     # option = (penalty, cover_teacher, rank, slot_val, ret or None)
-    slot_opts, slot_meta = [], []
+    slot_opts, slot_meta, slot_fix = [], [], []
     for row_num, cls, stype in ordered:
         cands, priority = candidates_for(row_num, cls, stype, used)
         slot_meta.append((row_num, cls, stype, priority, cands))
         opts = []
+        if row_num in fixed:
+            # Hand-fixed row: exactly one option, taken as given (no rule checks -- a clash
+            # the user chose is flagged in the table, not overridden).
+            f_cover, f_key = fixed[row_num]
+            if not f_cover:
+                slot_fix.append("NONE")
+            else:
+                f_val = schedules.get(f_cover, {}).get(day_idx, {}).get(row_num)
+                f_prio = next((c[3] for c in cands if c[1] == f_cover), 2)
+                f_ret = None
+                if f_key:
+                    rd, rr, occ = [int(x) for x in str(f_key).split("|")]
+                    dt = return_date(sick_date, rd, occ) if sick_date is not None else None
+                    f_ret = (rd, rr, ret_base.get(f_cover, {}).get(rd, {}).get(rr), occ, dt)
+                slot_fix.append((0, f_cover, 0, f_val, f_ret, f_prio))
+            slot_opts.append([slot_fix[-1]] if slot_fix[-1] != "NONE" else [])
+            continue
+        slot_fix.append(None)
         if cands:
+            # Goodwill fairness (needs the substitution log): when a cover can't be repaid,
+            # ask whoever owes the most goodwill first (highest Balance), then whoever has
+            # the fewest lessons that day. Swaps are unaffected -- they are repaid anyway.
+            fair = {}
+            if LOG_LOADED:
+                order = sorted(cands, key=lambda c: (
+                    -LOG_BAL.get(c[1], 0),
+                    count_lessons(schedules.get(c[1], {}).get(day_idx, {}), day_idx),
+                    c[1]))
+                fair = {c[1]: i for i, c in enumerate(order)}
             with_ret = 0
             for rank, cand in enumerate(cands):
                 _, teacher, slot_val, prio = cand
-                base = P_RANK * rank + (P_VA if teacher in VA_TEACHERS else 0) + (P_P2 if prio == 2 else 0)
+                extra = (P_VA if teacher in VA_TEACHERS else 0) + (P_P2 if prio == 2 else 0)
                 # A cover must not hand the cover teacher a 3rd lesson of one class that day --
                 # the same limit returns already obey. Ranked with the return-side rule, so an
                 # earlier return is never bought with a triple.
                 if stype == "regular" and cls:
                     t_day = schedules.get(teacher, {}).get(day_idx, {})
                     if count_same_class(t_day, day_idx, cls) + 1 > MAX_SAME_CLASS_PER_DAY:
-                        base += P_STACK
+                        extra += P_STACK
+                base = P_RANK * rank + extra
                 rets = enumerate_returns(teacher, stype, sick_teacher, day_idx,
                                          sick_classes, schedules, sick_date, cls)
                 if rets and with_ret < MAX_COVERS_CONSIDERED:
                     with_ret += 1
                     for pen, rd, rr, rc, occ, dt in rets:
                         opts.append((base + pen, teacher, rank, slot_val, (rd, rr, rc, occ, dt), prio))
-                if rank < 2 or not rets:
+                if fair:
+                    opts.append((P_RANK * fair[teacher] + extra + P_GOODWILL,
+                                 teacher, rank, slot_val, None, prio))
+                elif rank < 2 or not rets:
                     opts.append((base + P_GOODWILL, teacher, rank, slot_val, None, prio))
             opts.sort(key=lambda o: o[0])
         slot_opts.append(opts)
@@ -1094,7 +1279,6 @@ def assign_covers(sick_teacher, day_idx, schedules, excluded_today, sick_date=No
     for i in range(n - 1, -1, -1):
         suffix_min[i] = suffix_min[i + 1] + (slot_opts[i][0][0] if slot_opts[i] else 0)
 
-    sick_week = schedules.get(sick_teacher, {})
     best = {"pen": None, "choice": None, "nodes": 0}
 
     def _dfs(i, pen, used_t, lesson_days, committed, choice):
@@ -1104,6 +1288,27 @@ def assign_covers(sick_teacher, day_idx, schedules, excluded_today, sick_date=No
         if i == n:
             if best["pen"] is None or pen < best["pen"]:
                 best["pen"], best["choice"] = pen, list(choice)
+            return
+        if slot_fix[i] is not None:                 # hand-fixed: apply as given
+            opt = None if slot_fix[i] == "NONE" else slot_fix[i]
+            added = []
+            if opt:
+                used_t.add(opt[1])
+                ret = opt[4]
+                if ret:
+                    rd, rr, rc, occ, dt = ret
+                    dkey = dt if dt is not None else (rd, occ)
+                    if (dkey, rr) not in committed:
+                        committed.add((dkey, rr)); added.append(("c", (dkey, rr)))
+                    if counts_as_lesson(rr, rd) and dkey not in lesson_days:
+                        lesson_days.add(dkey); added.append(("l", dkey))
+            choice.append(opt)
+            _dfs(i + 1, pen, used_t, lesson_days, committed, choice)
+            choice.pop()
+            if opt:
+                used_t.discard(opt[1])
+            for kind, v in added:
+                (committed if kind == "c" else lesson_days).discard(v)
             return
         if not slot_opts[i]:                        # no cover at all for this slot
             choice.append(None)
@@ -1124,7 +1329,7 @@ def assign_covers(sick_teacher, day_idx, schedules, excluded_today, sick_date=No
                 is_lesson = counts_as_lesson(rr, rd)
                 if is_lesson and dkey in lesson_days:
                     continue
-                s_sched = sick_week.get(rd, {})
+                s_sched = _dated(sick_teacher, rd, dt, ret_base)
                 s_free = sum(1 for r in ACTIVE_ROWS[rd] if is_free(s_sched.get(r)) and r != rr)
                 if s_free - sum(1 for (d, _) in committed if d == dkey) < MIN_FREE_AFTER:
                     continue
@@ -1149,12 +1354,14 @@ def assign_covers(sick_teacher, day_idx, schedules, excluded_today, sick_date=No
             _dfs(i + 1, pen + P_NOCOVER, used_t, lesson_days, committed, choice)
             choice.pop()
 
-    _dfs(0, 0, set(), set(), set(), [])
+    # Dates where the sick teacher already has a lesson return booked (log or an
+    # earlier day of this absence) count toward "one lesson return per date".
+    _dfs(0, 0, set(), {d for (t, d) in BOOKED_RET if t == sick_teacher}, set(), [])
     choice = best["choice"] or [None] * n
 
     # ── Turn the chosen options into output rows ──────────────────────────
     assignments = []
-    for (row_num, cls, stype, priority, cands), opt in zip(slot_meta, choice):
+    for (row_num, cls, stype, priority, cands), opt, fx in zip(slot_meta, choice, slot_fix):
         lesson_label = "Reading" if row_num == 6 else ROW_TO_LESSON.get(row_num, "")
         time_str = LESSON_TIMES.get(row_num, "")
         if opt is None:
@@ -1162,7 +1369,7 @@ def assign_covers(sick_teacher, day_idx, schedules, excluded_today, sick_date=No
                 "row": row_num, "lesson": lesson_label, "class": cls, "time": time_str,
                 "cover": None, "stype": stype, "priority": None, "alts": [],
                 "ret_day": None, "ret_row": None, "ret_class": None, "ret_occ": 0,
-                "remark": "No cover available", "flags": ["nocover"],
+                "remark": "No cover available", "flags": ["nocover"] + (["fixed"] if fx else []),
             })
             continue
         _, cover_teacher, _, slot_val, ret, priority = opt
@@ -1174,7 +1381,9 @@ def assign_covers(sick_teacher, day_idx, schedules, excluded_today, sick_date=No
             ret_day, ret_row, ret_class, ret_occ, _ = ret
 
         remark, flags = _remark(stype, priority, cover_teacher, slot_val,
-                                sick_teacher, ret_day, ret_row, schedules)
+                                sick_teacher, ret_day, ret_row, ret_base)
+        if fx:
+            flags = flags + ["fixed"]
 
         assignments.append({
             "row": row_num, "lesson": lesson_label, "class": cls, "time": time_str,
@@ -1299,7 +1508,7 @@ def apply_makeup(schedules, day_idx, src_day_idx, last_lesson):
     return rows
 
 
-# ── Entry point ──────────────────────────────────────────────────────────────
+# ── Output rows ──────────────────────────────────────────────────────────────
 def _fmt(a, sick_teacher, sick_date, day_idx):
     flags = list(a["flags"])
     if a["ret_day"] is not None:
@@ -1315,6 +1524,8 @@ def _fmt(a, sick_teacher, sick_date, day_idx):
         rd_str = ret_lesson = ret_time = ret_day_name = ret_cls = ""
     return {
         "date": sick_date.strftime("%d/%m/%Y"),
+        "date_iso": sick_date.strftime("%Y-%m-%d"),
+        "swap_iso": rd.strftime("%Y-%m-%d") if (a["ret_day"] is not None and rd) else "",
         "day": DAY_NAMES[day_idx],
         "sick": sick_teacher,
         "class": a["class"],
@@ -1336,12 +1547,162 @@ def _fmt(a, sick_teacher, sick_date, day_idx):
     }
 
 
+# ── Substitution log (v23) ───────────────────────────────────────────────────
+# The school's "lesson substitution output" workbook: sheet Combined, columns A–N
+# (Date, Day, Subject Teacher, Class, Lesson, Time, Substitute Teacher, Swap Date,
+# Swap Day, Class, Swap Lesson, Swap Time, Remark, Cover), and sheet Balance
+# (Teacher, Being covered, Help covered, Balance, Official). A row with Cover = 1 is a
+# goodwill cover; Balance = being covered - help covered - official, exactly as the
+# Balance sheet's own formulas work it out.
+LESSON_TO_ROW = {v: k for k, v in ROW_TO_LESSON.items()}
+LOG_HEADERS = ["Date", "Day", "Subject Teacher", "Class", "Lesson", "Time",
+               "Substitute Teacher", "Swap Date", "Swap Day", "Class", "Swap Lesson ",
+               "Swap Time", "Remark ", "Cover"]
+
+
+def _lesson_row(v):
+    if v is None:
+        return None
+    s = str(v).strip()
+    low = s.lower()
+    if low.startswith("reading"):
+        return 6
+    if low.startswith("homeroom"):
+        return 5
+    m = _re.match(r"^(?:L\s*)?(\d)(?:\.0)?$", s, _re.I)
+    return LESSON_TO_ROW.get(int(m.group(1))) if m else None
+
+
+def _as_dt(v):
+    if isinstance(v, datetime):
+        return datetime(v.year, v.month, v.day)
+    if isinstance(v, _dt.date):
+        return datetime(v.year, v.month, v.day)
+    if isinstance(v, str):
+        s = v.strip()
+        for f in ("%d/%m/%Y", "%Y-%m-%d", "%d/%m/%y", "%d-%m-%Y"):
+            try:
+                return datetime.strptime(s, f)
+            except ValueError:
+                pass
+    return None
+
+
+def _initials(v):
+    if v is None:
+        return None
+    s = str(v).strip().upper()
+    return s if s and s not in ("/", "NO COVER") else None
+
+
+def _is_one(v):
+    try:
+        return float(v) == 1
+    except (TypeError, ValueError):
+        return False
+
+
+def parse_log(path):
+    """Read the substitution log. Returns (entries, balances, summary)."""
+    wb = openpyxl.load_workbook(path, data_only=True)
+    ws = wb["Combined"] if "Combined" in wb.sheetnames else wb.worksheets[0]
+    entries, being, helped = [], {}, {}
+    for r in ws.iter_rows(min_row=2, max_col=14, values_only=True):
+        r = list(r) + [None] * (14 - len(r))
+        d = _as_dt(r[0])
+        sick = _initials(r[2])
+        if d is None or not sick:
+            continue
+        cover = _initials(r[6])
+        rdate = _as_dt(r[7])
+        e = {"date": d, "sick": sick, "cls": (str(r[3]).strip() if r[3] is not None else None),
+             "row": _lesson_row(r[4]), "cover": cover,
+             "rdate": rdate, "rrow": _lesson_row(r[10]) if rdate else None,
+             "rcls": (str(r[9]).strip() if r[9] not in (None, "/") else None),
+             "goodwill": _is_one(r[13])}
+        entries.append(e)
+        if e["goodwill"]:
+            being[sick] = being.get(sick, 0) + 1
+            if cover:
+                helped[cover] = helped.get(cover, 0) + 1
+    official = {}
+    if "Balance" in wb.sheetnames:
+        for r in wb["Balance"].iter_rows(min_row=2, max_col=5, values_only=True):
+            t = _initials(r[0]) if r and r[0] is not None else None
+            if t and len(r) >= 5 and isinstance(r[4], (int, float)):
+                official[t] = r[4]
+    bal = {}
+    for t in set(being) | set(helped) | set(official):
+        bal[t] = being.get(t, 0) - helped.get(t, 0) - official.get(t, 0)
+    summary = {"rows": len(entries),
+               "goodwill": sum(1 for e in entries if e["goodwill"]),
+               "last": max(e["date"] for e in entries).strftime("%d/%m/%Y") if entries else "",
+               "sheet": ws.title}
+    return entries, bal, summary
+
+
+def _entry_from_row(r):
+    """A planned output row (as the table holds it) -> a dated booking entry."""
+    try:
+        d = datetime.strptime(r["date_iso"], "%Y-%m-%d")
+    except (KeyError, ValueError, TypeError):
+        return None
+    rd = None
+    if r.get("swap_iso"):
+        try:
+            rd = datetime.strptime(r["swap_iso"], "%Y-%m-%d")
+        except ValueError:
+            rd = None
+    rrow = None
+    if rd and r.get("ret_key"):
+        try:
+            rrow = int(str(r["ret_key"]).split("|")[1])
+        except (IndexError, ValueError):
+            rrow = None
+    return {"date": d, "sick": r.get("sick"), "cls": r.get("class"),
+            "row": int(r.get("row") or 0) or None, "cover": _initials(r.get("cover")),
+            "rdate": rd, "rrow": rrow, "rcls": r.get("swap_class") or None,
+            "goodwill": "goodwill" in (r.get("flags") or [])}
+
+
+def sync_plan(rows_json):
+    """The editor calls this after every change so dated bookings match the table."""
+    global PLAN_ENTRIES
+    rows = json.loads(rows_json) if isinstance(rows_json, str) else rows_json
+    PLAN_ENTRIES = [e for e in (_entry_from_row(r) for r in rows) if e]
+    return len(PLAN_ENTRIES)
+
+
 # ── Row editor ───────────────────────────────────────────────────────────────
 # The results table lets you change the substitute teacher and the return slot by
-# hand. These three functions answer the dropdowns from the run that is already
-# loaded -- no files are re-read, and every choice is checked by the same rules
-# the planner uses.
+# hand. These functions answer the dropdowns from the run that is already loaded --
+# no files are re-read, and every choice is checked by the same rules the planner
+# uses. Every call names the sick date (`key` = "YYYY-MM-DD"), because a multi-day
+# absence has one context per day.
 _CTX = {}
+_CTXS = {}
+
+
+def _use_ctx(key, sick_teacher):
+    """Point the engine at one day of the loaded run, with every OTHER row of the plan
+    (and the log) booked, and this teacher-day's own rows left out."""
+    global _CTX, RET_BASE, SAME_WEEKDAY_RETURNS, CUR_SKIP_EXTRA, RETURN_OCCURRENCES
+    c = _CTXS.get(key)
+    if not c:
+        return False
+    RETURN_OCCURRENCES = c["occ"]
+    _build_booked(skip=(sick_teacher, c["date"]))
+    RET_BASE = c["base"]
+    SAME_WEEKDAY_RETURNS = c["same_wd"]
+    CUR_SKIP_EXTRA = ABSENT.get(sick_teacher, set())
+    if LESSON_CAMPUS is not c["lc"]:
+        LESSON_CAMPUS.clear()
+        LESSON_CAMPUS.update(c["lc"])
+    _CTX = dict(c)
+    _CTX["sched"] = _overlay_day(c["base"], c["day"], c["date"])
+    # Anyone already covering on that date (log / other rows) stays offered but is
+    # flagged in the table -- same as before -- so only the fixed exclusions apply here.
+    return True
 
 
 def _slot_candidates(sick_teacher, row_num):
@@ -1361,10 +1722,12 @@ def _ordinal(n):
     return {1: "1st", 2: "2nd", 3: "3rd"}.get(n, "%dth" % n)
 
 
-def cover_choices(sick_teacher, row_num):
+def cover_choices(sick_teacher, row_num, key=None):
     """Every teacher allowed to cover this slot, best first, with the day this
     cover would give them: lessons now -> after, against the cap, and how many
     of that class it would make."""
+    if key is not None and not _use_ctx(key, sick_teacher):
+        return []
     if not _CTX:
         return []
     day = _CTX["day"]
@@ -1386,7 +1749,7 @@ def cover_choices(sick_teacher, row_num):
         # teacher's OWN duty class on another day -- list it so the choice is visible.
         swapcls = ""
         if stype in ("reading", "studyhall"):
-            week = _CTX["sched"].get(teacher, {})
+            week = _CTX["base"].get(teacher, {})
             duties = []
             for d in range(5):
                 if d == day or (stype == "reading" and d == 4):
@@ -1403,29 +1766,34 @@ def cover_choices(sick_teacher, row_num):
             "now": now, "after": now + adds, "cap": MAX_LESSONS[day],
             "same": ("%s %s lesson" % (_ordinal(same + 1), cls)) if adds and cls else "",
             "swapcls": swapcls,
+            "bal": LOG_BAL.get(teacher, 0) if LOG_LOADED else None,
         })
     return out
 
 
-def return_choices(sick_teacher, row_num, cover_teacher):
+def return_choices(sick_teacher, row_num, cover_teacher, key=None):
     """Every valid return slot for that cover teacher, earliest first."""
+    if key is not None and not _use_ctx(key, sick_teacher):
+        return []
     if not _CTX or not cover_teacher:
         return []
-    sched, day, sick_date = _CTX["sched"], _CTX["day"], _CTX["date"]
-    sick_classes = classes_taught(sick_teacher, sched)
-    cls = sched.get(sick_teacher, {}).get(day, {}).get(row_num)   # the class being covered
+    base, day, sick_date = _CTX["base"], _CTX["day"], _CTX["date"]
+    sick_classes = classes_taught(sick_teacher, base)
+    cls = _CTX["sched"].get(sick_teacher, {}).get(day, {}).get(row_num)   # the class being covered
     stype = slot_type(row_num, day)
     out = []
     for pen, rd, rr, rc, occ, dt in enumerate_returns(cover_teacher, stype, sick_teacher,
-                                                      day, sick_classes, sched, sick_date, cls,
+                                                      day, sick_classes, base, sick_date, cls,
                                                       all_slots=True):
-        s_sched = sched.get(sick_teacher, {}).get(rd, {})
+        s_sched = _dated(sick_teacher, rd, dt, base)
         note = []
         if counts_as_lesson(rr, rd):
             same = count_same_class(s_sched, rd, rc)
             if same:
                 note.append("%s %s lesson that day"
                             % ({1: "2nd", 2: "3rd"}.get(same, "%dth" % (same + 1)), rc))
+            if dt is not None and (sick_teacher, dt) in BOOKED_RET:
+                note.append("already has a lesson return that day")
         days = (dt - sick_date).days if dt else None
         if days is not None and days > RETURN_WITHIN_DAYS:
             note.append("LATE — %d days" % days)
@@ -1449,11 +1817,13 @@ def return_choices(sick_teacher, row_num, cover_teacher):
     return out
 
 
-def rebuild_row(sick_teacher, row_num, cover_teacher, ret_key):
+def rebuild_row(sick_teacher, row_num, cover_teacher, ret_key, key=None):
     """Recompute one output row after a hand-picked cover or return slot."""
+    if key is not None and not _use_ctx(key, sick_teacher):
+        return None
     if not _CTX:
         return None
-    sched, day, sick_date = _CTX["sched"], _CTX["day"], _CTX["date"]
+    base, day, sick_date = _CTX["base"], _CTX["day"], _CTX["date"]
     cls, stype, cands = _slot_candidates(sick_teacher, row_num)
     a = {"row": row_num,
          "lesson": "Reading" if row_num == 6 else ROW_TO_LESSON.get(row_num, ""),
@@ -1467,23 +1837,211 @@ def rebuild_row(sick_teacher, row_num, cover_teacher, ret_key):
     if ret_key:
         rd, rr, occ = [int(x) for x in str(ret_key).split("|")]
         a["ret_day"], a["ret_row"], a["ret_occ"] = rd, rr, occ
-        a["ret_class"] = sched.get(cover_teacher, {}).get(rd, {}).get(rr)
+        a["ret_class"] = base.get(cover_teacher, {}).get(rd, {}).get(rr)
     a["remark"], a["flags"] = _remark(stype, a["priority"], cover_teacher,
-                                      sched.get(cover_teacher, {}).get(day, {}).get(row_num),
-                                      sick_teacher, a["ret_day"], a["ret_row"], sched)
+                                      _CTX["sched"].get(cover_teacher, {}).get(day, {}).get(row_num),
+                                      sick_teacher, a["ret_day"], a["ret_row"], base)
     return _fmt(a, sick_teacher, sick_date, day)
+
+
+def replan(key, sick_teacher, fixed_json, rows_json):
+    """Keep the hand-fixed rows exactly as they are and re-plan the rest of that
+    teacher's day around them (and around every other row in the table)."""
+    rows = json.loads(rows_json) if isinstance(rows_json, str) else rows_json
+    fixed_in = json.loads(fixed_json) if isinstance(fixed_json, str) else fixed_json
+    sync_plan(rows)
+    if not _use_ctx(key, sick_teacher):
+        return {"ok": False, "error": "That day is no longer loaded — run the plan again."}
+    c = _CTX
+    mine = [r for r in rows if r.get("sick") == sick_teacher and r.get("date_iso") == key]
+    only = {int(r["row"]) for r in mine}
+    # Covers used by the OTHER sick teachers that day stay unavailable.
+    others = {_initials(r.get("cover")) for r in rows
+              if r.get("date_iso") == key and r.get("sick") != sick_teacher}
+    excluded = set(c["excluded"]) | {t for t in others if t}
+    fixed = {}
+    for f in fixed_in:
+        fixed[int(f["row"])] = (_initials(f.get("cover")), f.get("ret_key") or None)
+    res = assign_covers(sick_teacher, c["day"], c["sched"], excluded, c["date"],
+                        only_rows=only, fixed=fixed)
+    if not res:
+        return {"ok": False, "error": "Nothing to re-plan."}
+    assignments, _ = res
+    return {"ok": True, "rows": [_fmt(a, sick_teacher, c["date"], c["day"]) for a in assignments]}
+
+
+# ── Part-day: list the lessons that could need cover ────────────────────────
+def _school_days(d0, d1, cal_path):
+    """School days in [d0, d1]: weekdays that aren't calendar holidays. Also returns
+    the calendar pieces so run_swap needn't parse it twice."""
+    block, skip, events, makeups = set(), set(), {}, {}
+    if cal_path:
+        block, skip, events, makeups = parse_calendar(cal_path, d0.date())
+    days, d = [], d0
+    while d <= d1:
+        if d.weekday() < 5 and d.date() not in block:
+            days.append(d)
+        d += timedelta(days=1)
+    return days, (block, skip, events, makeups)
+
+
+def day_lessons(teachers_csv, date_str, date_to="", mk_path=None, dh_path=None,
+                tp_path=None, cal_path=None):
+    """For the part-day picker: every slot of each sick teacher that would need cover."""
+    d0 = datetime.strptime(date_str, "%Y-%m-%d")
+    d1 = datetime.strptime(date_to, "%Y-%m-%d") if date_to else d0
+    try:
+        days, _ = _school_days(d0, d1, cal_path)
+    except Exception:
+        days, _ = _school_days(d0, d1, None)
+    schedules, _ = load_all(mk_path, dh_path, tp_path)
+    out = []
+    for d in days[:31]:
+        di = d.weekday()
+        for t in [x.strip().upper() for x in teachers_csv.split(",") if x.strip()]:
+            s = schedules.get(t, {}).get(di, {})
+            items = []
+            for r in ACTIVE_ROWS[di]:
+                v = s.get(r)
+                if not v or v == "CP" or r == 5 or (r == 6 and di == 4):
+                    continue
+                lab = "Reading" if r == 6 else ("L%d" % ROW_TO_LESSON[r])
+                if r == SH_ROW[di]:
+                    lab += " SH"
+                items.append({"row": r, "label": "%s %s" % (lab, v)})
+            out.append({"key": "%s|%s" % (t, d.strftime("%Y-%m-%d")), "teacher": t,
+                        "label": "%s · %s %s" % (t, DAY_NAMES[di][:3], d.strftime("%d/%m")),
+                        "lessons": items})
+    return out
+
+
+# ── Excel: append the plan to the substitution log ───────────────────────────
+def log_dups(rows_json, log_path=None):
+    """How many of these teacher-days are already in the log (to warn before adding)."""
+    if not log_path:
+        return []
+    rows = json.loads(rows_json) if isinstance(rows_json, str) else rows_json
+    entries, _, _ = parse_log(log_path)
+    have = {(e["sick"], e["date"]) for e in entries}
+    seen = []
+    for r in rows:
+        e = _entry_from_row(r)
+        if e and (e["sick"], e["date"]) in have:
+            lab = "%s %s" % (e["sick"], e["date"].strftime("%d/%m"))
+            if lab not in seen:
+                seen.append(lab)
+    return seen
+
+
+def _lesson_cell(v):
+    s = str(v or "").strip()
+    return int(s) if s.isdigit() else (s or None)
+
+
+def export_log(rows_json, log_path=None, out_path="/out.xlsx"):
+    """Write the plan's rows into the Combined sheet at the first empty row (after the
+    last used row), with Cover = 1 on goodwill rows, and make sure every teacher in
+    them has a Balance row. With no log uploaded, start a new workbook laid out like
+    the 2526 one."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    rows = json.loads(rows_json) if isinstance(rows_json, str) else rows_json
+    if log_path:
+        wb = openpyxl.load_workbook(log_path)
+        ws = wb["Combined"] if "Combined" in wb.sheetnames else wb.worksheets[0]
+    else:
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Combined"
+        for i, h in enumerate(LOG_HEADERS, 1):
+            cell = ws.cell(1, i, h)
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill("solid", fgColor="12314F")
+            cell.alignment = Alignment(vertical="center")
+        for col, w in zip("ABCDEFGHIJKLMN", (11, 11, 9, 7, 8, 13, 10, 11, 11, 7, 9, 13, 48, 7)):
+            ws.column_dimensions[col].width = w
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = "A1:N1"
+    last = 1
+    for r in ws.iter_rows(min_row=1, max_col=13):
+        if any(c.value not in (None, "") for c in r):
+            last = r[0].row
+    r_i = last + 1
+    teachers = []
+    for row in rows:
+        e = _entry_from_row(row)
+        if not e:
+            continue
+        gw = "goodwill" in (row.get("flags") or [])
+        cover = e["cover"] or ""
+        vals = [e["date"], row.get("day"), row.get("sick"), row.get("class"),
+                _lesson_cell(row.get("lesson")), row.get("time"), cover or None,
+                e["rdate"], row.get("swap_day") or None, row.get("swap_class") or None,
+                _lesson_cell(row.get("swap_lesson")), row.get("swap_time") or None,
+                row.get("remark") or "/", 1 if (gw and cover) else None]
+        for ci, v in enumerate(vals, 1):
+            cell = ws.cell(r_i, ci, v)
+            if ci in (1, 8) and v is not None:
+                cell.number_format = "dd/mm/yyyy"
+        for t in (row.get("sick"), cover):
+            if t and t not in teachers:
+                teachers.append(t)
+        r_i += 1
+    added = r_i - last - 1
+    # Balance sheet: one row per teacher, same formulas as the existing sheet.
+    if "Balance" in wb.sheetnames:
+        bs = wb["Balance"]
+    else:
+        bs = wb.create_sheet("Balance")
+        for i, h in enumerate([None, "Being covered", "Help covered", "Balance", "Official"], 1):
+            if h:
+                bs.cell(1, i, h).font = Font(bold=True)
+    have = {str(c.value).strip().upper() for c in bs["A"] if c.value}
+    b_last = max([c.row for c in bs["A"] if c.value not in (None, "")] + [1])
+    for t in teachers:
+        if t in have:
+            continue
+        b_last += 1
+        n = b_last
+        bs.cell(n, 1, t)
+        bs.cell(n, 2, "=SUMPRODUCT(COUNTIFS(Combined!C:C, $A%d, Combined!N:N, 1))" % n)
+        bs.cell(n, 3, "=SUMPRODUCT(COUNTIFS(Combined!G:G, $A%d, Combined!N:N, 1))" % n)
+        bs.cell(n, 4, "=B%d-C%d-E%d" % (n, n, n))
+        have.add(t)
+    wb.save(out_path)
+    return {"added": added, "first_row": last + 1, "sheet": ws.title}
+
+
+# ── Entry point ──────────────────────────────────────────────────────────────
+MAX_RANGE_DAYS = 31
 
 
 def run_swap(teachers_csv, date_str, exclude_csv="",
              mk_path=None, dh_path=None, tp_path=None, cal_path=None, roster_path=None,
-             cross_path=None):
-    global SKIP_DATES, EXCLUDED_ALWAYS, VA_TEACHERS, SH_RESTRICTED, CROSS_CAMPUS, _CTX
-    global SAME_WEEKDAY_RETURNS
+             cross_path=None, date_to="", only_rows_json="", log_path=None):
+    """
+    Plan cover for one date, or a date range (multi-day absence: planned day by day,
+    each day seeing the swaps already arranged on the days before it). `only_rows_json`
+    = {"LWT|2026-09-25": [7, 8]} limits a teacher-day to those rows (part-day absence).
+    `log_path` = the substitution log: its swaps are treated as booked, and its Balance
+    decides who is asked first for a goodwill cover.
+    """
+    global SKIP_DATES, EXCLUDED_ALWAYS, VA_TEACHERS, SH_RESTRICTED, CROSS_CAMPUS, _CTX, _CTXS
+    global SAME_WEEKDAY_RETURNS, LOG_LOADED, LOG_ENTRIES, LOG_ACTIVE, LOG_BAL, PLAN_ENTRIES
+    global ABSENT, RET_BASE, CUR_SKIP_EXTRA, RETURN_OCCURRENCES
     SAME_WEEKDAY_RETURNS = True
-    out = {"ok": True, "warnings": [], "teachers": [], "error": None}
+    RETURN_OCCURRENCES = 2
+    _CTX, _CTXS = {}, {}
+    PLAN_ENTRIES, ABSENT, RET_BASE, CUR_SKIP_EXTRA = [], {}, None, set()
+    LOG_LOADED, LOG_ENTRIES, LOG_ACTIVE, LOG_BAL = False, [], [], {}
+    _build_booked()
+    out = {"ok": True, "warnings": [], "days": [], "teachers": [], "error": None, "log": None}
+
+    def fail(msg):
+        return {"ok": False, "error": msg, "warnings": [], "days": [], "teachers": []}
+
     if not (mk_path or dh_path or tp_path):
-        return {"ok": False, "error": "Please upload at least one campus timetable (MK, DH or TP).",
-                "warnings": [], "teachers": []}
+        return fail("Please upload at least one campus timetable (MK, DH or TP).")
 
     if roster_path:
         try:
@@ -1510,34 +2068,42 @@ def run_swap(teachers_csv, date_str, exclude_csv="",
         SH_RESTRICTED = _default_sh_restricted()
         out["warnings"].append("No Teaching Roster uploaded — using the built-in 2627 PE/VA/subject lists (upload it to keep these current, and to cover TP).")
 
-    sick_date = datetime.strptime(date_str, "%Y-%m-%d")
-    day_idx = sick_date.weekday()
-    if day_idx > 4:
-        return {"ok": False, "error": "That date is a weekend — no school.",
-                "warnings": [], "teachers": []}
+    d0 = datetime.strptime(date_str, "%Y-%m-%d")
+    d1 = datetime.strptime(date_to, "%Y-%m-%d") if date_to else d0
+    if d1 < d0:
+        return fail("The 'to' date is before the 'from' date.")
+    if (d1 - d0).days > MAX_RANGE_DAYS:
+        return fail("That range is longer than %d days — please plan it in parts." % MAX_RANGE_DAYS)
+    multi = d1 > d0
+    RETURN_OCCURRENCES = RETURN_OCC_MULTI if multi else 2
+    if not multi and d0.weekday() > 4:
+        return fail("That date is a weekend — no school.")
 
     SKIP_DATES = set()
-    makeup_today = None
+    block, events, makeups = set(), {}, {}
     if cal_path:
         try:
-            block, skip, events, makeups = parse_calendar(cal_path, sick_date.date())
-            makeup_today = makeups.get(sick_date.date())
+            block, skip, events, makeups = parse_calendar(cal_path, d0.date())
             SKIP_DATES = {datetime(d.year, d.month, d.day) for d in skip}
-            today = sick_date.date()
-            if today in block:
-                return {"ok": False,
-                        "error": "That date looks like a school holiday: "
-                                 + " | ".join(sorted(set(events.get(today, [])))),
-                        "warnings": [], "teachers": []}
-            if events.get(today):
-                out["warnings"].append(
-                    "Calendar events on this date — check the timetable is normal: "
-                    + " | ".join(sorted(set(events[today]))))
         except Exception as e:
             out["warnings"].append("Calendar could not be parsed (%s); "
                                    "return-swap dates not filtered for holidays." % e)
     else:
         out["warnings"].append("No school calendar uploaded — holidays are NOT being checked.")
+
+    dates, holidays = [], []
+    d = d0
+    while d <= d1:
+        if d.weekday() < 5:
+            (holidays if d.date() in block else dates).append(d)
+        d += timedelta(days=1)
+    if not dates:
+        if not multi:
+            return fail("That date looks like a school holiday: "
+                        + " | ".join(sorted(set(events.get(d0.date(), [])))))
+        return fail("There are no school days in that range.")
+    if multi and holidays:
+        out["warnings"].append("Skipped (holiday): " + ", ".join(h.strftime("%a %d/%m") for h in holidays))
 
     schedules, load_warnings = load_all(mk_path, dh_path, tp_path)
     out["warnings"].extend(load_warnings)
@@ -1552,23 +2118,6 @@ def run_swap(teachers_csv, date_str, exclude_csv="",
             out["warnings"].append("Cross Campus Teachers file could not be read (%s) — campus presence inferred from the timetables instead." % e)
     else:
         out["warnings"].append("No Cross Campus Teachers file uploaded — campus presence is inferred from the timetables, which can be wrong for teachers who split their week.")
-
-    if makeup_today:
-        src_day, src_name, last_lesson = makeup_today
-        if src_day == day_idx:
-            makeup_today = None
-        else:
-            rows = apply_makeup(schedules, day_idx, src_day, last_lesson)
-            # The sick weekday's timetable now holds the make-up rows, so it no longer
-            # describes a normal future Friday/Tuesday -- don't place returns on it.
-            SAME_WEEKDAY_RETURNS = False
-            out["warnings"].append(
-                "Make-up timetable: this %s runs the %s timetable for L1-L%d, so lessons %s "
-                "are taken from %s. Reading and any later lessons stay as normal %s. "
-                "Double-check any teacher who works a different campus on %s."
-                % (DAY_NAMES[day_idx], src_name, last_lesson,
-                   "-".join(str(ROW_TO_LESSON[r]) for r in (rows[0], rows[-1])) if rows else "none",
-                   src_name, DAY_NAMES[day_idx], src_name))
     if not mk_path:
         out["warnings"].append("No MK timetable uploaded — MK-only teachers will not be found.")
     if not dh_path:
@@ -1576,41 +2125,128 @@ def run_swap(teachers_csv, date_str, exclude_csv="",
     if not tp_path:
         out["warnings"].append("No TP timetable uploaded — TP-only teachers will not be found.")
 
-    excluded = set(t.strip().upper() for t in exclude_csv.split(",") if t.strip())
-    excluded |= EXCLUDED_ALWAYS
     teachers = [t.strip().upper() for t in teachers_csv.split(",") if t.strip()]
-    excluded |= set(teachers)   # sick teachers never cover each other
+    excluded_base = set(t.strip().upper() for t in exclude_csv.split(",") if t.strip())
+    excluded_base |= EXCLUDED_ALWAYS
+    excluded_base |= set(teachers)   # sick teachers never cover each other
+    for t in teachers:
+        ABSENT[t] = set(dates)
 
-    # Snapshot for the row editor: taken BEFORE the run consumes cover teachers, so a
-    # dropdown still offers someone already used elsewhere -- that clash is flagged,
-    # not hidden.
-    _CTX = {"sched": schedules, "day": day_idx, "date": sick_date, "excluded": set(excluded)}
+    if log_path:
+        try:
+            LOG_ENTRIES, LOG_BAL, summ = parse_log(log_path)
+            LOG_LOADED = True
+            run_pairs = {(t, dd) for t in teachers for dd in dates}
+            LOG_ACTIVE = [e for e in LOG_ENTRIES if (e["sick"], e["date"]) not in run_pairs]
+            dup = sorted({"%s %s" % (e["sick"], e["date"].strftime("%d/%m"))
+                          for e in LOG_ENTRIES if (e["sick"], e["date"]) in run_pairs})
+            for e in LOG_ACTIVE:          # anyone off in the log is away that date
+                ABSENT.setdefault(e["sick"], set()).add(e["date"])
+            owes = sorted(((b, t) for t, b in LOG_BAL.items() if b > 0), reverse=True)[:5]
+            summ["owes"] = ["%s +%g" % (t, b) for b, t in owes]
+            summ["dups"] = dup
+            out["log"] = summ
+            if dup:
+                out["warnings"].append(
+                    "The substitution log already has rows for %s — they are ignored for this "
+                    "plan. Delete them from the log if this plan replaces them." % ", ".join(dup))
+        except Exception as e:
+            LOG_LOADED = False
+            out["warnings"].append("Substitution log could not be read (%s) — planned without it." % e)
 
-    for sick_teacher in teachers:
-        entry = {"teacher": sick_teacher, "rows": [], "newly_used": [], "note": None}
-        if sick_teacher not in schedules:
-            entry["note"] = "%s was not found in either timetable." % sick_teacher
-            out["teachers"].append(entry); continue
-        result = assign_covers(sick_teacher, day_idx, schedules, excluded, sick_date)
-        if not result:
-            entry["note"] = "%s has no lessons on %s." % (sick_teacher, DAY_NAMES[day_idx])
-            out["teachers"].append(entry); continue
-        assignments, used_final = result
-        if not assignments:
-            entry["note"] = "%s has no lessons needing cover on %s." % (sick_teacher, DAY_NAMES[day_idx])
-            out["teachers"].append(entry); continue
-        entry["rows"] = [_fmt(a, sick_teacher, sick_date, day_idx) for a in assignments]
-        entry["newly_used"] = sorted(used_final - excluded)
-        excluded |= used_final
-        out["teachers"].append(entry)
+    only_rows = {}
+    if only_rows_json:
+        try:
+            only_rows = {k: set(int(x) for x in v) for k, v in json.loads(only_rows_json).items()}
+        except Exception:
+            only_rows = {}
 
+    needs_reload = False
+    lc_snap = _copy.deepcopy(LESSON_CAMPUS)
+    for sick_date in dates:
+        day_idx = sick_date.weekday()
+        iso = sick_date.strftime("%Y-%m-%d")
+        day_out = {"key": iso, "label": "%s %s" % (DAY_NAMES[day_idx], sick_date.strftime("%d/%m/%Y")),
+                   "warnings": [], "teachers": []}
+        if needs_reload:                          # the previous date rewrote the timetable
+            schedules, _ = load_all(mk_path, dh_path, tp_path)
+            lc_snap = _copy.deepcopy(LESSON_CAMPUS)
+            needs_reload = False
+        SAME_WEEKDAY_RETURNS = True
+        lc = lc_snap
+        if events.get(sick_date.date()):
+            day_out["warnings"].append(
+                "Calendar events on this date — check the timetable is normal: "
+                + " | ".join(sorted(set(events[sick_date.date()]))))
+        mk_today = makeups.get(sick_date.date())
+        if mk_today and mk_today[0] != day_idx:
+            src_day, src_name, last_lesson = mk_today
+            rows = apply_makeup(schedules, day_idx, src_day, last_lesson)
+            needs_reload = True
+            lc = _copy.deepcopy(LESSON_CAMPUS)
+            # The sick weekday's timetable now holds the make-up rows, so it no longer
+            # describes a normal future Friday/Tuesday -- don't place returns on it.
+            SAME_WEEKDAY_RETURNS = False
+            day_out["warnings"].append(
+                "Make-up timetable: this %s runs the %s timetable for L1-L%d, so lessons %s "
+                "are taken from %s. Reading and any later lessons stay as normal %s. "
+                "Double-check any teacher who works a different campus on %s."
+                % (DAY_NAMES[day_idx], src_name, last_lesson,
+                   "-".join(str(ROW_TO_LESSON[r]) for r in (rows[0], rows[-1])) if rows else "none",
+                   src_name, DAY_NAMES[day_idx], src_name))
+        RET_BASE = schedules
+        _build_booked()
+        away = {t for t, ds in ABSENT.items() if sick_date in ds}
+        excluded = set(excluded_base) | away | BOOKED_COVER.get(sick_date, set())
+        # Snapshot for the row editor: taken BEFORE the run consumes cover teachers, so a
+        # dropdown still offers someone already used elsewhere -- that clash is flagged,
+        # not hidden.
+        _CTXS[iso] = {"base": schedules, "day": day_idx, "date": sick_date,
+                      "excluded": set(excluded), "same_wd": SAME_WEEKDAY_RETURNS, "lc": lc,
+                      "occ": RETURN_OCCURRENCES}
+
+        for sick_teacher in teachers:
+            entry = {"teacher": sick_teacher, "rows": [], "newly_used": [], "note": None}
+            if sick_teacher not in schedules:
+                entry["note"] = "%s was not found in any timetable." % sick_teacher
+                day_out["teachers"].append(entry); continue
+            CUR_SKIP_EXTRA = ABSENT.get(sick_teacher, set())
+            _build_booked()
+            sched_today = _overlay_day(schedules, day_idx, sick_date)
+            key = "%s|%s" % (sick_teacher, iso)
+            result = assign_covers(sick_teacher, day_idx, sched_today, excluded, sick_date,
+                                   only_rows=only_rows.get(key))
+            if not result:
+                entry["note"] = "%s has no lessons on %s." % (sick_teacher, DAY_NAMES[day_idx])
+                day_out["teachers"].append(entry); continue
+            assignments, used_final = result
+            if not assignments:
+                entry["note"] = ("%s has no lessons needing cover on %s." % (sick_teacher, DAY_NAMES[day_idx])
+                                 if key not in only_rows else
+                                 "No lessons ticked for %s on %s." % (sick_teacher, DAY_NAMES[day_idx]))
+                day_out["teachers"].append(entry); continue
+            entry["rows"] = [_fmt(a, sick_teacher, sick_date, day_idx) for a in assignments]
+            if key in only_rows:
+                entry["part"] = True
+            entry["newly_used"] = sorted(used_final - excluded)
+            excluded |= used_final
+            PLAN_ENTRIES.extend(e for e in (_entry_from_row(r) for r in entry["rows"]) if e)
+            day_out["teachers"].append(entry)
+        out["days"].append(day_out)
+
+    # Single-day runs keep the old shape too (and the old top-level warnings).
+    if len(out["days"]) == 1:
+        out["warnings"].extend(out["days"][0]["warnings"])
+        out["days"][0]["warnings"] = []
+        out["teachers"] = out["days"][0]["teachers"]
     return out
+
 </script>
 
 <script>
 "use strict";
 /* ── IndexedDB file store ──────────────────────────────────────────── */
-const SLOTS = {mk:"MK Timetable", dh:"DH Timetable", tp:"TP Timetable", cal:"School Calendar", roster:"Teaching Roster", cross:"Cross Campus Teachers"};
+const SLOTS = {mk:"MK Timetable", dh:"DH Timetable", tp:"TP Timetable", cal:"School Calendar", roster:"Teaching Roster", cross:"Cross Campus Teachers", log:"Substitution Log"};
 let db;
 function openDB(){return new Promise((res,rej)=>{
   const r = indexedDB.open("lessonSwapDB",1);
@@ -1688,17 +2324,32 @@ async function ensureEngine(){
 }
 
 /* ── Run ───────────────────────────────────────────────────────────── */
+const FILE_KEYS = ["mk","dh","tp","cal","roster","cross","log"];
+async function stageFiles(){
+  const f = {};
+  for(const k of FILE_KEYS){
+    const rec = await idbGet(k);
+    if(rec){ pyodide.FS.writeFile("/"+k+".xlsx", new Uint8Array(rec.data)); f[k] = true; }
+    else{ try{ pyodide.FS.unlink("/"+k+".xlsx"); }catch(e){} f[k] = false; }
+  }
+  return f;
+}
+function setFileFlags(f){ FILE_KEYS.forEach(k=>pyodide.globals.set("_f_"+k, !!f[k])); }
+const PATHS_PY = 'mk_path="/mk.xlsx" if _f_mk else None, dh_path="/dh.xlsx" if _f_dh else None, '+
+                 'tp_path="/tp.xlsx" if _f_tp else None, cal_path="/cal.xlsx" if _f_cal else None';
+
 async function run(){
   const teachers = document.getElementById("inTeachers").value.trim();
   const date     = document.getElementById("inDate").value;
+  const dateTo   = document.getElementById("inDateTo").value;
   const exclude  = document.getElementById("inExclude").value.trim();
   const results  = document.getElementById("results");
-  results.innerHTML = "";
   if(!teachers){ alert("Please enter the sick teacher's initials."); return; }
   if(!date){ alert("Please pick the sick date."); return; }
+  if(dateTo && dateTo < date){ alert("The 'To' date is before the 'From' date."); return; }
   const mk = await idbGet("mk"), dh = await idbGet("dh"), tp = await idbGet("tp");
   if(!mk && !dh && !tp){ alert("Please upload at least one campus timetable (MK, DH or TP) first."); return; }
-  const cal = await idbGet("cal"), roster = await idbGet("roster"), cross = await idbGet("cross");
+  results.innerHTML = "";
 
   const btn  = document.getElementById("btnRun");
   const spin = document.getElementById("spinner"), spinTxt = document.getElementById("spinnerTxt");
@@ -1706,36 +2357,32 @@ async function run(){
   try{
     spinTxt.textContent = "Loading engine…";
     await ensureEngine();
-    spinTxt.textContent = "Computing cover plan…";
-    if(mk)     pyodide.FS.writeFile("/mk.xlsx",     new Uint8Array(mk.data));
-    if(dh)     pyodide.FS.writeFile("/dh.xlsx",     new Uint8Array(dh.data));
-    if(tp)     pyodide.FS.writeFile("/tp.xlsx",     new Uint8Array(tp.data));
-    if(cal)    pyodide.FS.writeFile("/cal.xlsx",    new Uint8Array(cal.data));
-    if(roster) pyodide.FS.writeFile("/roster.xlsx", new Uint8Array(roster.data));
-    if(cross)  pyodide.FS.writeFile("/cross.xlsx",  new Uint8Array(cross.data));
+    spinTxt.textContent = (dateTo && dateTo !== date) ? "Computing cover plan day by day…" : "Computing cover plan…";
+    await new Promise(r=>setTimeout(r,30));          // let the spinner paint
+    const f = await stageFiles(); setFileFlags(f);
+    let only = "";
+    if(document.getElementById("inPart").checked){
+      const o = collectPartDay();
+      if(o === null){ alert("Part-day is ticked — click “Load lessons” and untick the lessons the teacher will still teach."); return; }
+      only = JSON.stringify(o);
+    }
     pyodide.globals.set("_teachers", teachers);
     pyodide.globals.set("_date", date);
+    pyodide.globals.set("_date_to", (dateTo && dateTo !== date) ? dateTo : "");
     pyodide.globals.set("_exclude", exclude);
-    pyodide.globals.set("_has_mk", !!mk);
-    pyodide.globals.set("_has_dh", !!dh);
-    pyodide.globals.set("_has_tp", !!tp);
-    pyodide.globals.set("_has_cal", !!cal);
-    pyodide.globals.set("_has_roster", !!roster);
-    pyodide.globals.set("_has_cross", !!cross);
+    pyodide.globals.set("_only", only);
     const out = pyodide.runPython(`
 import json, io, contextlib
 _buf = io.StringIO()
 with contextlib.redirect_stdout(_buf):
-    _r = run_swap(_teachers, _date, _exclude,
-                  mk_path="/mk.xlsx" if _has_mk else None,
-                  dh_path="/dh.xlsx" if _has_dh else None,
-                  tp_path="/tp.xlsx" if _has_tp else None,
-                  cal_path="/cal.xlsx" if _has_cal else None,
-                  roster_path="/roster.xlsx" if _has_roster else None,
-                  cross_path="/cross.xlsx" if _has_cross else None)
+    _r = run_swap(_teachers, _date, _exclude, ${PATHS_PY},
+                  roster_path="/roster.xlsx" if _f_roster else None,
+                  cross_path="/cross.xlsx" if _f_cross else None,
+                  date_to=_date_to, only_rows_json=_only,
+                  log_path="/log.xlsx" if _f_log else None)
 json.dumps(_r)
 `);
-    render(JSON.parse(out), teachers, date);
+    render(JSON.parse(out), {teachers:teachers, date:date, dateTo:(dateTo && dateTo!==date)?dateTo:""});
   }catch(e){
     results.innerHTML = '<div class="card"><div class="banner err">Error: '+esc(String(e))+'</div></div>';
   }finally{
@@ -1743,12 +2390,59 @@ json.dumps(_r)
   }
 }
 
+/* ── Part-day picker ───────────────────────────────────────────────── */
+function partInputsKey(){
+  return [document.getElementById("inTeachers").value.trim().toUpperCase(),
+          document.getElementById("inDate").value, document.getElementById("inDateTo").value].join("|");
+}
+async function loadPartDay(){
+  const box = document.getElementById("partBox");
+  const teachers = document.getElementById("inTeachers").value.trim();
+  const date = document.getElementById("inDate").value, dateTo = document.getElementById("inDateTo").value;
+  if(!teachers || !date){ box.innerHTML = '<div class="rowmeta">Enter the teacher and date first, then click <b>Load lessons</b>.</div>'; return; }
+  box.innerHTML = '<div class="rowmeta">⏳ Loading lessons…</div>';
+  try{
+    await ensureEngine();
+    const f = await stageFiles(); setFileFlags(f);
+    pyodide.globals.set("_teachers", teachers);
+    pyodide.globals.set("_date", date);
+    pyodide.globals.set("_date_to", (dateTo && dateTo!==date) ? dateTo : "");
+    const list = JSON.parse(pyodide.runPython(`json.dumps(day_lessons(_teachers, _date, _date_to, ${PATHS_PY}))`));
+    window._partKey = partInputsKey();
+    if(!list.length){ box.innerHTML = '<div class="rowmeta">No school days found for that date.</div>'; return; }
+    let h = '<div class="rowmeta">Untick the lessons the teacher will <b>still teach</b> — only ticked lessons get cover.</div>';
+    list.forEach(e=>{
+      h += '<div class="pday" data-k="'+esc(e.key)+'"><b>'+esc(e.label)+'</b>';
+      if(!e.lessons.length) h += ' <span class="none">no lessons</span>';
+      e.lessons.forEach(l=>{
+        h += '<label class="chip"><input type="checkbox" data-r="'+l.row+'" checked> '+esc(l.label)+'</label>';
+      });
+      h += ' <button class="btn btn-ghost btn-xs" onclick="partAll(this,true)">All</button>'+
+           '<button class="btn btn-ghost btn-xs" onclick="partAll(this,false)">None</button></div>';
+    });
+    box.innerHTML = h;
+  }catch(e){ box.innerHTML = '<div class="banner err">Could not list lessons: '+esc(String(e))+'</div>'; }
+}
+function partAll(btn, on){ btn.closest(".pday").querySelectorAll("input[type=checkbox]").forEach(c=>{c.checked=on;}); }
+function collectPartDay(){
+  const days = document.querySelectorAll("#partBox .pday");
+  if(!days.length || window._partKey !== partInputsKey()) return null;
+  const o = {};
+  days.forEach(d=>{ o[d.dataset.k] = [...d.querySelectorAll("input[type=checkbox]")].filter(c=>c.checked).map(c=>+c.dataset.r); });
+  return o;
+}
+function togglePart(){
+  const on = document.getElementById("inPart").checked;
+  document.getElementById("partWrap").style.display = on ? "block" : "none";
+  if(on) loadPartDay();
+}
+
 /* ── Render ────────────────────────────────────────────────────────── */
 const HEADERS = ["Date","Day","Subject Teacher","Class","Lesson","Time","Substitute Teacher",
                  "Swap Date","Swap Day","Class","Swap Lesson","Swap Time","Remark"];
 const KEYS = ["date","day","sick","class","lesson","time","cover",
               "swap_date","swap_day","swap_class","swap_lesson","swap_time","remark"];
-function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 
 /* Tags summarise flags visually; the phrases they replace are stripped from the
    displayed remark so nothing reads twice. The Excel copy keeps the full remark. */
@@ -1765,62 +2459,88 @@ function remarkCell(row){
   if(!text) text = tags ? "" : "/";
   return tags + esc(text);
 }
+function allRows(){
+  const r = window._lastResult, out = [];
+  if(r) r.days.forEach(d=>d.teachers.forEach(t=>t.rows.forEach(x=>out.push(x))));
+  return out;
+}
 
-function render(r, teachers, date){
+function render(r, meta){
+  window._meta = meta;
   const el = document.getElementById("results");
-  let h = '<div class="card"><h2><span class="n">3</span>Cover plan — '+esc(teachers)+' · '+esc(date)+'</h2>';
+  const when = esc(meta.date)+(meta.dateTo ? ' → '+esc(meta.dateTo) : '');
+  let h = '<div class="card"><h2><span class="n">3</span>Cover plan — '+esc(meta.teachers)+' · '+when+'</h2>';
   if(!r.ok){
     h += '<div class="banner err">'+esc(r.error||"Failed")+'</div></div>';
     el.innerHTML = h; return;
   }
   for(const w of r.warnings) h += '<div class="banner warn">⚠ '+esc(w)+'</div>';
+  if(r.log){
+    h += '<div class="banner info">📒 Substitution log: <b>'+r.log.rows+'</b> rows (latest '+esc(r.log.last||"—")+
+         ') — swaps already in it are treated as booked. Goodwill covers go first to whoever owes the most'+
+         (r.log.owes && r.log.owes.length ? ' (<b>'+esc(r.log.owes.join(", "))+'</b>)' : ' (nobody owes any yet)')+
+         ', then fewest lessons that day.</div>';
+  }
 
   let anyRows = 0, gw = 0, nc = 0;
-  for(const t of r.teachers) for(const row of t.rows){
+  allRowsOf(r).forEach(row=>{
     anyRows++;
     if(row.flags.indexOf("goodwill")>=0) gw++;
     if(row.cover==="NO COVER") nc++;
-  }
+  });
+  const multi = r.days.length > 1;
 
-  for(const t of r.teachers){
-    h += '<div class="tcard"><h3>'+esc(t.teacher)+
-         '<span class="pill">'+t.rows.length+' lesson'+(t.rows.length===1?'':'s')+'</span>';
-    const tgw = t.rows.filter(x=>x.flags.indexOf("goodwill")>=0).length;
-    const tnc = t.rows.filter(x=>x.cover==="NO COVER").length;
-    if(tgw) h += '<span class="pill gold">'+tgw+' goodwill</span>';
-    if(tnc) h += '<span class="pill red">'+tnc+' uncovered</span>';
-    h += '</h3>';
-    if(t.note){ h += '<div class="banner warn">'+esc(t.note)+'</div></div>'; continue; }
+  r.days.forEach((d, di)=>{
+    if(multi){
+      h += '<div class="dayhdr">'+esc(d.label)+'</div>';
+      for(const w of (d.warnings||[])) h += '<div class="banner warn">⚠ '+esc(w)+'</div>';
+    }
+    d.teachers.forEach((t, ti)=>{
+      h += '<div class="tcard"><h3>'+esc(t.teacher)+(multi?' <span class="daylab">'+esc(d.label)+'</span>':'')+
+           '<span class="pill">'+t.rows.length+' lesson'+(t.rows.length===1?'':'s')+'</span>';
+      const tgw = t.rows.filter(x=>x.flags.indexOf("goodwill")>=0).length;
+      const tnc = t.rows.filter(x=>x.cover==="NO COVER").length;
+      if(t.part) h += '<span class="pill">part-day</span>';
+      if(tgw) h += '<span class="pill gold">'+tgw+' goodwill</span>';
+      if(tnc) h += '<span class="pill red">'+tnc+' uncovered</span>';
+      h += '</h3>';
+      if(t.note){ h += '<div class="banner warn">'+esc(t.note)+'</div></div>'; return; }
 
-    h += '<div class="tablewrap"><table><thead><tr>';
-    HEADERS.forEach((hd,i)=>{ h += '<th'+(i>=7?' class="grp2"':'')+'>'+hd+'</th>'; });
-    h += '</tr></thead><tbody>';
-    t.rows.forEach((row,ri)=>{
-      h += '<tr data-t="'+esc(t.teacher)+'" data-i="'+ri+'">';
-      KEYS.forEach((k,i)=>{
-        if(i===6){ h += '<td class="cover"><select class="pick selCover" aria-label="Substitute teacher"></select></td>'; return; }
-        if(i===7){ h += '<td><select class="pick selRet" aria-label="Return swap slot"></select></td>'; return; }
-        if(i===12){ h += '<td class="rem">'+remarkCell(row)+'</td>'; return; }
-        const cls = (i===0||i===5||i===11) ? "mono" : "";
-        h += '<td'+(cls?' class="'+cls+'"':'')+' data-k="'+k+'">'+esc(row[k]||"")+'</td>';
+      h += '<div class="tablewrap"><table><thead><tr><th class="fixc" title="Fix this row — Re-plan keeps it exactly as it is">📌</th>';
+      HEADERS.forEach((hd,i)=>{ h += '<th'+(i>=7?' class="grp2"':'')+'>'+hd+'</th>'; });
+      h += '</tr></thead><tbody>';
+      t.rows.forEach((row,ri)=>{
+        h += '<tr data-d="'+di+'" data-ti="'+ti+'" data-i="'+ri+'"'+(row.fixed?' class="fixedrow"':'')+'>';
+        h += '<td class="fixc"><input type="checkbox" class="fixchk" title="Fix this row"'+(row.fixed?' checked':'')+'></td>';
+        KEYS.forEach((k,i)=>{
+          if(i===6){ h += '<td class="cover"><select class="pick selCover" aria-label="Substitute teacher"></select></td>'; return; }
+          if(i===7){ h += '<td><select class="pick selRet" aria-label="Return swap slot"></select></td>'; return; }
+          if(i===12){ h += '<td class="rem">'+remarkCell(row)+'</td>'; return; }
+          const cls = (i===0||i===5||i===11) ? "mono" : "";
+          h += '<td'+(cls?' class="'+cls+'"':'')+' data-k="'+k+'">'+esc(row[k]||"")+'</td>';
+        });
+        h += '</tr>';
       });
-      h += '</tr>';
+      h += '</tbody></table></div>';
+      h += '<div class="rowmeta">Change the <b>Substitute Teacher</b> or <b>Swap Date</b> to override — the row is fixed 📌 and any clash is flagged. '+
+           'Fix the rows you want to keep, then <b>Re-plan the rest</b>.</div>';
+      h += '<div class="rowmeta" id="used-'+di+'-'+ti+'"><b>Covers used:</b> '+esc(t.newly_used.join(", ")||"—")+'</div>';
+      h += '<div class="copybar">'+
+           '<button class="btn btn-ghost" onclick="copyTSV('+di+','+ti+',false)">Copy '+esc(t.teacher)+'’s rows</button>'+
+           '<button class="btn btn-ghost btnReplan" id="rp-'+di+'-'+ti+'" onclick="replanTeacher('+di+','+ti+')">↻ Re-plan the rest</button>'+
+           '</div></div>';
     });
-    h += '</tbody></table></div>';
-    h += '<div class="rowmeta">Change the <b>Substitute Teacher</b> or <b>Swap Date</b> cell to override — the row updates and any clash is flagged.</div>';
-    h += '<div class="rowmeta" id="used-'+esc(t.teacher)+'"><b>Covers used:</b> '+esc(t.newly_used.join(", ")||"—")+'</div>';
-    h += '<div class="copybar">'+
-         '<button class="btn btn-ghost" onclick="copyTSV(\''+esc(t.teacher)+'\',false)">Copy '+esc(t.teacher)+'’s rows</button>'+
-         '</div></div>';
-  }
+  });
 
   if(anyRows){
     h += '<div class="banner ok">'+anyRows+' row'+(anyRows===1?'':'s')+' ready'+
          (gw?' · '+gw+' goodwill':'')+(nc?' · '+nc+' with no cover':'')+
-         '. Copy below, then paste into the <b>Combined</b> sheet at the first empty row (columns A–M).</div>';
+         '. Copy them into the <b>Combined</b> sheet at the first empty row (columns A–M), or let the app add them to the log.</div>';
     h += '<div class="copybar">'+
-         '<button class="btn btn-up" onclick="copyTSV(null,false)">Copy all rows for Excel</button>'+
-         '<button class="btn btn-ghost" onclick="copyTSV(null,true)">Copy with headers</button>'+
+         '<button class="btn btn-up" onclick="copyTSV(null,null,false)">Copy all rows for Excel</button>'+
+         '<button class="btn btn-ghost" onclick="copyTSV(null,null,true)">Copy with headers</button>'+
+         '<button class="btn btn-up" onclick="downloadSlips()">🧾 Slips (PDF)</button>'+
+         '<button class="btn btn-up" onclick="downloadExcel()">📒 Add to log (Excel)</button>'+
          '<button class="btn btn-ghost" onclick="togglePaste()">Show paste box</button>'+
          '<button class="btn btn-ghost" onclick="window.print()">Print</button>'+
          '<span id="copyMsg" class="rowmeta"></span></div>'+
@@ -1832,6 +2552,7 @@ function render(r, teachers, date){
   fillPickers();
   validateAll();
 }
+function allRowsOf(r){ const o=[]; r.days.forEach(d=>d.teachers.forEach(t=>t.rows.forEach(x=>o.push(x)))); return o; }
 
 /* ── Row editor ────────────────────────────────────────────────────────
    The dropdowns ask the engine for the same candidate lists the planner
@@ -1843,35 +2564,49 @@ function py(fn, args){
 }
 function rowOf(tr){
   const r = window._lastResult; if(!r||!tr) return null;
-  const t = r.teachers.find(x=>x.teacher===tr.dataset.t);
+  const d = r.days[+tr.dataset.d]; if(!d) return null;
+  const t = d.teachers[+tr.dataset.ti];
   return t ? t.rows[+tr.dataset.i] : null;
 }
+function syncPlan(){
+  try{ py("sync_plan",[JSON.stringify(allRows())]); }catch(e){}
+}
 function fillPickers(){
-  const r = window._lastResult; if(!r || typeof pyodide === "undefined") return;
+  const r = window._lastResult; if(!r || typeof pyodide === "undefined" || !pyodide) return;
+  syncPlan();
   document.querySelectorAll("#results tbody tr").forEach(tr=>{
     const row = rowOf(tr); if(!row) return;
-    const sel = tr.querySelector("select.selCover"); if(!sel) return;
-    let opts = [];
-    try{ opts = py("cover_choices",[row.sick, row.row]); }catch(e){ opts = []; }
     const cur = (row.cover==="NO COVER") ? "" : row.cover;
     if(row.auto_cover===undefined){ row.auto_cover = cur; row.auto_ret = row.ret_key||""; }
-    let html = opts.map(o=>'<option value="'+esc(o.t)+'">'+esc(coverLabel(o, o.t===row.auto_cover))+'</option>').join("");
-    if(cur && !opts.some(o=>o.t===cur)) html = '<option value="'+esc(cur)+'">'+esc(cur)+'</option>' + html;
-    sel.innerHTML = html + '<option value="">— no cover —</option>';
-    sel.value = cur;
+    fillCover(tr, row);
     fillReturn(tr, row);
   });
+}
+function fillCover(tr, row){
+  const sel = tr.querySelector("select.selCover"); if(!sel) return;
+  let opts = [];
+  try{ opts = py("cover_choices",[row.sick, row.row, row.date_iso]); }catch(e){ opts = []; }
+  const cur = (row.cover==="NO COVER") ? "" : row.cover;
+  const gw = (row.flags||[]).indexOf("goodwill")>=0;
+  let html = opts.map(o=>'<option value="'+esc(o.t)+'">'+esc(coverLabel(o, o.t===row.auto_cover, gw))+'</option>').join("");
+  if(cur && !opts.some(o=>o.t===cur)) html = '<option value="'+esc(cur)+'">'+esc(cur)+'</option>' + html;
+  sel.innerHTML = html + '<option value="">— no cover —</option>';
+  sel.value = cur;
 }
 function fillReturn(tr, row){
   const sel = tr.querySelector("select.selRet"); if(!sel) return;
   let opts = [];
   if(row.cover && row.cover!=="NO COVER"){
-    try{ opts = py("return_choices",[row.sick, row.row, row.cover]); }catch(e){ opts = []; }
+    try{ opts = py("return_choices",[row.sick, row.row, row.cover, row.date_iso]); }catch(e){ opts = []; }
   }
   const sameCover = (row.cover===row.auto_cover);
-  sel.innerHTML = opts.map(o=>
+  let html = opts.map(o=>
     '<option value="'+esc(o.key)+'">'+esc(returnLabel(o, sameCover && o.key===row.auto_ret))+'</option>'
-  ).join("") + '<option value="">— goodwill (no return) —</option>';
+  ).join("");
+  // A fixed row's return may no longer be offered (another row now uses that date) — keep it visible.
+  if(row.ret_key && !opts.some(o=>o.key===row.ret_key))
+    html = '<option value="'+esc(row.ret_key)+'">'+esc(row.swap_date+" · L"+row.swap_lesson+" "+row.swap_class)+'</option>' + html;
+  sel.innerHTML = html + '<option value="">— goodwill (no return) —</option>';
   sel.value = row.ret_key || "";
   sel.disabled = (row.cover==="NO COVER");
 }
@@ -1881,12 +2616,13 @@ function loadLabel(o){
   return (o.after>o.now ? o.now+" → "+unit(o.after) : unit(o.now)) + " (max "+o.cap+")";
 }
 const PICK = "  ★ app's pick";
-function coverLabel(o, isPick){
+function coverLabel(o, isPick, isGoodwill){
   const bits = [];
   if(o.tags) bits.push(o.tags);
   if(o.swapcls) bits.push(o.swapcls);
   bits.push(loadLabel(o));
   if(o.same) bits.push(o.same);
+  if(isGoodwill && o.bal !== null && o.bal !== undefined) bits.push("balance "+(o.bal>0?"+":"")+o.bal);
   return o.t+" · "+bits.join(" · ")+(isPick?PICK:"");
 }
 function returnLabel(o, isPick){
@@ -1903,37 +2639,73 @@ function applyRow(tr, row){
   if(cs) cs.value = (row.cover==="NO COVER") ? "" : row.cover;
   const rs = tr.querySelector("select.selRet");
   if(rs) rs.value = row.ret_key || "";
+  const fx = tr.querySelector("input.fixchk");
+  if(fx) fx.checked = !!row.fixed;
+  tr.classList.toggle("fixedrow", !!row.fixed);
 }
 document.addEventListener("change", function(ev){
-  const sel = ev.target;
-  if(!sel || !sel.classList || !sel.classList.contains("pick")) return;
-  const tr = sel.closest("tr"), row = rowOf(tr);
-  if(!row || typeof pyodide === "undefined") return;
+  const el = ev.target;
+  if(!el || !el.classList) return;
+  if(el.classList.contains("fixchk")){
+    const row = rowOf(el.closest("tr")); if(!row) return;
+    row.fixed = el.checked;
+    el.closest("tr").classList.toggle("fixedrow", el.checked);
+    return;
+  }
+  if(!el.classList.contains("pick")) return;
+  const sel = el, tr = sel.closest("tr"), row = rowOf(tr);
+  if(!row || !pyodide) return;
   const isCover = sel.classList.contains("selCover");
   const cover = isCover ? sel.value : (row.cover==="NO COVER" ? "" : row.cover);
   let key = isCover ? "" : sel.value;
+  const wasGW = (row.flags||[]).indexOf("goodwill")>=0;
   try{
     if(isCover && cover){
-      const opts = py("return_choices",[row.sick, row.row, cover]);
+      const opts = py("return_choices",[row.sick, row.row, cover, row.date_iso]);
       key = opts.length ? opts[0].key : "";          // earliest valid return
     }
-    const fresh = py("rebuild_row",[row.sick, row.row, cover||null, key||null]);
+    const fresh = py("rebuild_row",[row.sick, row.row, cover||null, key||null, row.date_iso]);
     if(!fresh) return;
     Object.keys(fresh).forEach(k=>{ row[k] = fresh[k]; });
   }catch(e){ alert("Could not update that row: "+e); return; }
+  row.fixed = true;                                  // a hand-picked row is kept on Re-plan
   tr.classList.add("edited");
   applyRow(tr, row);
+  syncPlan();
   if(isCover) fillReturn(tr, row);
+  if(wasGW !== ((row.flags||[]).indexOf("goodwill")>=0)) fillCover(tr, row);
   validateAll();
 });
+/* Keep the 📌 rows exactly as they are and let the engine re-plan the rest. */
+function replanTeacher(di, ti){
+  const r = window._lastResult; if(!r) return;
+  const d = r.days[di], t = d.teachers[ti];
+  const fixed = t.rows.filter(x=>x.fixed).map(x=>({row:x.row, cover:(x.cover==="NO COVER"?"":x.cover), ret_key:x.ret_key||""}));
+  if(!fixed.length){ alert("Tick 📌 on the row(s) you want to keep, then Re-plan the rest."); return; }
+  if(fixed.length === t.rows.length){ alert("Every row is fixed — untick 📌 on the rows you want the app to re-plan."); return; }
+  let res;
+  try{ res = py("replan",[d.key, t.teacher, JSON.stringify(fixed), JSON.stringify(allRows())]); }
+  catch(e){ alert("Could not re-plan: "+e); return; }
+  if(!res || !res.ok){ alert((res && res.error) || "Could not re-plan."); return; }
+  const old = {}; t.rows.forEach(x=>{ old[x.row] = x; });
+  t.rows = res.rows.map(x=>{
+    const o = old[x.row];
+    if(o && o.fixed){ x.fixed = true; x.auto_cover = o.auto_cover; x.auto_ret = o.auto_ret; }
+    return x;
+  });
+  const covers = []; t.rows.forEach(x=>{ if(x.cover && x.cover!=="NO COVER") covers.push(x.cover); });
+  t.newly_used = covers.sort();
+  render(r, window._meta);
+  flash("↻ "+t.teacher+" re-planned around "+fixed.length+" fixed row"+(fixed.length===1?"":"s")+".");
+}
 /* Clashes between rows are flagged, never blocked — you may have a reason. */
 function validateAll(){
   const r = window._lastResult; if(!r) return;
   const all = [], byCover = {}, byRetDay = {}, bySlot = {}, warn = {};
-  r.teachers.forEach(t=>t.rows.forEach((row,i)=>all.push({t:t.teacher, i:i, row:row})));
+  r.days.forEach((d,di)=>d.teachers.forEach((t,ti)=>t.rows.forEach((row,i)=>all.push({k:di+"|"+ti+"|"+i, row:row}))));
   all.forEach(x=>{
     const c = x.row.cover;
-    if(c && c!=="NO COVER") (byCover[c] = byCover[c]||[]).push(x);
+    if(c && c!=="NO COVER") (byCover[x.row.date+"|"+c] = byCover[x.row.date+"|"+c]||[]).push(x);
     if(x.row.swap_date){
       if(x.row.stype==="regular"){
         const k = x.row.sick+"|"+x.row.swap_date;
@@ -1943,32 +2715,33 @@ function validateAll(){
       (bySlot[s] = bySlot[s]||[]).push(x);
     }
   });
-  const add = (x,msg)=>{ const k=x.t+"|"+x.i; (warn[k]=warn[k]||[]).push(msg); };
-  Object.keys(byCover).forEach(c=>{ if(byCover[c].length>1) byCover[c].forEach(x=>add(x, c+" covers "+byCover[c].length+" lessons")); });
+  const add = (x,msg)=>{ (warn[x.k]=warn[x.k]||[]).push(msg); };
+  Object.keys(byCover).forEach(c=>{ if(byCover[c].length>1) byCover[c].forEach(x=>add(x, c.split("|")[1]+" covers "+byCover[c].length+" lessons that day")); });
   Object.keys(byRetDay).forEach(k=>{ if(byRetDay[k].length>1) byRetDay[k].forEach(x=>add(x, "2 lesson returns on "+k.split("|")[1])); });
   Object.keys(bySlot).forEach(k=>{ if(bySlot[k].length>1) bySlot[k].forEach(x=>add(x, "two returns in the same slot")); });
   all.forEach(x=>{
-    const tr = document.querySelector('#results tbody tr[data-t="'+x.t+'"][data-i="'+x.i+'"]');
+    const [di,ti,i] = x.k.split("|");
+    const tr = document.querySelector('#results tbody tr[data-d="'+di+'"][data-ti="'+ti+'"][data-i="'+i+'"]');
     if(!tr) return;
     const cell = tr.querySelector("td.rem"); if(!cell) return;
-    const w = warn[x.t+"|"+x.i];
+    const w = warn[x.k];
     cell.innerHTML = (w ? '<span class="tag bad">⚠ '+esc(w.join(" · "))+'</span>' : "") + remarkCell(x.row);
   });
-  r.teachers.forEach(t=>{
-    const el = document.getElementById("used-"+t.teacher); if(!el) return;
+  r.days.forEach((d,di)=>d.teachers.forEach((t,ti)=>{
+    const el = document.getElementById("used-"+di+"-"+ti); if(!el) return;
     const used = [];
     t.rows.forEach(row=>{ if(row.cover && row.cover!=="NO COVER" && used.indexOf(row.cover)<0) used.push(row.cover); });
     el.innerHTML = '<b>Covers used:</b> '+esc(used.sort().join(", ")||"—");
-  });
+  }));
 }
 
 /* ── Excel-ready copy ──────────────────────────────────────────────── */
-function buildTSV(teacher, withHeaders){
+function buildTSV(di, ti, withHeaders){
   const r = window._lastResult; if(!r) return "";
   const lines = [];
   if(withHeaders) lines.push(HEADERS.join("\t"));
-  for(const t of r.teachers){
-    if(teacher && t.teacher !== teacher) continue;
+  r.days.forEach((d,dj)=>d.teachers.forEach((t,tj)=>{
+    if(di!==null && (dj!==di || tj!==ti)) return;
     for(const row of t.rows){
       lines.push(KEYS.map(k=>{
         let v = row[k]==null ? "" : String(row[k]);
@@ -1976,19 +2749,18 @@ function buildTSV(teacher, withHeaders){
         return v.replace(/[\t\r\n]+/g," ");
       }).join("\t"));
     }
-  }
+  }));
   return lines.join("\r\n");
 }
 function flash(msg){
   const el = document.getElementById("copyMsg");
-  if(el){ el.textContent = msg; setTimeout(()=>{el.textContent="";}, 3500); }
+  if(el){ el.textContent = msg; clearTimeout(flash._t); flash._t = setTimeout(()=>{el.textContent="";}, 6000); }
 }
-function copyTSV(teacher, withHeaders){
-  const tsv = buildTSV(teacher, withHeaders);
+function copyTSV(di, ti, withHeaders){
+  const tsv = buildTSV(di, ti, withHeaders);
   if(!tsv){ alert("Nothing to copy."); return; }
   const n = tsv.split("\r\n").length - (withHeaders?1:0);
   const done = () => flash("✓ "+n+" row"+(n===1?"":"s")+" copied — paste into Excel.");
-  // Primary: async clipboard API
   if(navigator.clipboard && window.isSecureContext){
     navigator.clipboard.writeText(tsv).then(done).catch(()=>legacyCopy(tsv,done));
   }else{
@@ -2016,9 +2788,148 @@ function togglePaste(){
   const box = document.getElementById("tsvBox");
   if(!box) return;
   if(box.style.display === "block"){ box.style.display = "none"; return; }
-  box.value = buildTSV(null,false);
+  box.value = buildTSV(null,null,false);
   box.style.display = "block";
   box.focus(); box.select();
+}
+
+/* ── Substitution slips (PDF) ─────────────────────────────────────────
+   Same wording and layout as the Substitution Slip Generator: a swap gives
+   two slips (substitute teacher + swap-back teacher), a goodwill cover one. */
+const SLIP_CSS = `
+  .sliproot{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;background:#fff;width:190mm;}
+  .slip{background:#fff;padding:20px 26px;margin:0 0 14px;box-sizing:border-box;min-height:132mm;display:flex;flex-direction:column;page-break-inside:avoid;border-bottom:1px dashed #bbb;}
+  .slip-head{text-align:center;border-bottom:2px solid #333;padding-bottom:8px;margin-bottom:14px;}
+  .slip-title{font-size:18px;font-weight:700;margin:0;}
+  .slip-kind{font-size:11px;color:#666;margin:3px 0 0;text-transform:uppercase;letter-spacing:.5px;}
+  .slip p{font-size:13.5px;line-height:1.6;margin:0 0 10px;}
+  .slip .to{font-size:15px;}
+  .slip table{width:100%;border-collapse:collapse;font-size:13px;margin:4px 0 12px;}
+  .slip th{text-align:left;color:#555;font-weight:600;padding:5px 8px;border-bottom:1.5px solid #999;background:none;position:static;}
+  .slip td{padding:5px 8px;border-bottom:1px solid #ddd;}
+  .slip .remark{font-size:12.5px;color:#555;margin:4px 0 0;}
+  .slip .thanks{font-size:13.5px;font-style:italic;color:#1a5;margin:auto 0 0;padding-top:12px;}
+  .strong{font-weight:700;}`;
+function lessonName(l, stype){
+  if(!l) return "";
+  if(l==="Reading") return "Reading";
+  return "L"+l+(stype==="studyhall" ? " (Study Hall)" : "");
+}
+function slipGroups(){
+  const groups = [], idx = {};
+  allRows().forEach(x=>{
+    if(!x.cover || x.cover==="NO COVER") return;
+    const k = x.date_iso+"|"+x.sick+"|"+x.cover;
+    if(!(k in idx)){ idx[k] = groups.length; groups.push({date:x.date, day:x.day, sick:x.sick, cover:x.cover, rows:[]}); }
+    groups[idx[k]].rows.push(x);
+  });
+  return groups;
+}
+function slipRemark(rows){
+  const bits = [];
+  rows.forEach(x=>String(x.remark||"").split(";").forEach(p=>{
+    p = p.trim();
+    if(p && p!=="/" && !/^goodwill cover$/i.test(p) && bits.indexOf(p)<0) bits.push(p);
+  }));
+  return bits.length ? '<p class="remark">Remark: '+esc(bits.join("; "))+'</p>' : "";
+}
+function slipTable(rows, swap){
+  const head = '<tr><th>Date</th><th>Day</th><th>Class</th><th>Lesson</th><th>Time</th></tr>';
+  const body = rows.map(x=> swap
+    ? '<tr><td>'+esc(x.swap_date)+'</td><td>'+esc(x.swap_day)+'</td><td>'+esc(x.swap_class)+'</td><td>'+esc(lessonName(x.swap_lesson, x.stype))+'</td><td>'+esc(x.swap_time)+'</td></tr>'
+    : '<tr><td>'+esc(x.date)+'</td><td>'+esc(x.day)+'</td><td>'+esc(x.class)+'</td><td>'+esc(lessonName(x.lesson, x.stype))+'</td><td>'+esc(x.time)+'</td></tr>').join("");
+  return '<table>'+head+body+'</table>';
+}
+function buildSlipsHTML(){
+  let html = "";
+  slipGroups().forEach(g=>{
+    const swaps = g.rows.filter(x=>x.swap_date), gws = g.rows.filter(x=>!x.swap_date);
+    const remark = slipRemark(g.rows);
+    if(gws.length){
+      html += '<div class="slip"><div class="slip-head"><p class="slip-title">Lesson Cover Notice</p><p class="slip-kind">For cover teacher</p></div>'+
+        '<p class="to">To: <span class="strong">'+esc(g.cover)+'</span></p>'+
+        '<p>You are arranged to <span class="strong">cover</span> the following lesson(s) for <span class="strong">'+esc(g.sick)+'</span>:</p>'+
+        slipTable(gws,false)+remark+'<p class="thanks">Thank you for helping with the cover.</p></div>';
+    }
+    if(swaps.length){
+      const d0 = swaps[0], same = swaps.every(x=>x.swap_date===d0.swap_date);
+      const when = same ? 'on <span class="strong">'+esc(d0.swap_date)+(d0.swap_day?' ('+esc(d0.swap_day)+')':'')+'</span>' : '';
+      html += '<div class="slip"><div class="slip-head"><p class="slip-title">Lesson Substitution Notice</p><p class="slip-kind">For substitute teacher</p></div>'+
+        '<p class="to">To: <span class="strong">'+esc(g.cover)+'</span></p>'+
+        '<p>You are arranged to <span class="strong">cover</span> the following lesson(s) for <span class="strong">'+esc(g.sick)+'</span>:</p>'+
+        slipTable(swaps,false)+
+        '<p>In return, <span class="strong">'+esc(g.sick)+'</span> will swap back to teach for you '+when+':</p>'+slipTable(swaps,true)+
+        remark+'<p class="thanks">Thank you for helping with the swap.</p></div>';
+      html += '<div class="slip"><div class="slip-head"><p class="slip-title">Lesson Swap Notice</p><p class="slip-kind">For swap teacher</p></div>'+
+        '<p class="to">To: <span class="strong">'+esc(g.sick)+'</span></p>'+
+        '<p><span class="strong">'+esc(g.cover)+'</span> has covered your lesson(s) on <span class="strong">'+esc(g.date)+' ('+esc(g.day)+')</span>. '+
+        'In return, you are arranged to <span class="strong">swap back</span> and teach the following '+when+':</p>'+
+        slipTable(swaps,true)+remark+'<p class="thanks">Thank you for helping with the swap.</p></div>';
+    }
+  });
+  return html;
+}
+function loadScript(src){
+  return new Promise((res,rej)=>{ const s=document.createElement("script"); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s); });
+}
+function slipFileName(){
+  const m = window._meta || {};
+  const f = s => s ? s.slice(8,10)+"-"+s.slice(5,7) : "";
+  return "Lesson swap slips "+(m.teachers||"").replace(/[^A-Za-z0-9,]+/g,"")+" "+f(m.date)+(m.dateTo?" to "+f(m.dateTo):"")+".pdf";
+}
+async function downloadSlips(){
+  const body = buildSlipsHTML();
+  if(!body){ alert("No covered rows — nothing to put on a slip."); return; }
+  const html = '<div class="sliproot"><style>'+SLIP_CSS+'</style>'+body+'</div>';
+  flash("Preparing slips…");
+  try{
+    if(typeof html2pdf === "undefined")
+      await loadScript("https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js");
+    await html2pdf().set({
+      margin:[8,8,8,8], filename:slipFileName(),
+      image:{type:"jpeg",quality:0.98}, html2canvas:{scale:2,useCORS:true,scrollX:0,scrollY:0},
+      jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},
+      pagebreak:{mode:["css","legacy"],avoid:".slip"}
+    }).from(html).save();
+    flash("✓ Slips saved as a PDF ("+slipGroups().length+" teacher-pair"+(slipGroups().length===1?"":"s")+").");
+  }catch(e){
+    // Offline or blocked: open a print window instead (Save as PDF from there).
+    const w = window.open("","_blank","width=760,height=900");
+    if(!w){ alert("Could not build the PDF and pop-ups are blocked — allow pop-ups to print the slips."); return; }
+    w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+esc(slipFileName())+'</title><'+'/head><body>'+html+'</body></html>');
+    w.document.close(); w.focus(); setTimeout(()=>{ try{ w.print(); }catch(err){} }, 300);
+  }
+}
+
+/* ── Add to the substitution log (Excel) ──────────────────────────────
+   Rows go to the first empty row of Combined, Cover = 1 on goodwill rows,
+   and any new teacher gets a Balance row. The app keeps the updated copy. */
+async function downloadExcel(){
+  const rows = allRows();
+  if(!rows.length){ alert("Nothing to add."); return; }
+  try{
+    await ensureEngine();
+    const log = await idbGet("log");
+    if(log) pyodide.FS.writeFile("/log.xlsx", new Uint8Array(log.data));
+    const json = JSON.stringify(rows);
+    if(log){
+      const dups = py("log_dups",[json, "/log.xlsx"]);
+      if(dups.length && !confirm("The log already has rows for "+dups.join(", ")+".\n\nAdd these rows as well? (Cancel = don't add.)")) return;
+    }
+    const res = py("export_log",[json, log ? "/log.xlsx" : null, "/out.xlsx"]);
+    const bytes = pyodide.FS.readFile("/out.xlsx");
+    const name = log ? log.name : "2627 lesson substitution output.xlsx";
+    const blob = new Blob([bytes], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+    await idbPut("log",{name:name, size:bytes.length, date:new Date().toLocaleDateString(),
+                        data:bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset+bytes.byteLength)});
+    refreshSlot("log");
+    flash("✓ "+res.added+" row"+(res.added===1?"":"s")+" added to "+res.sheet+" from row "+res.first_row+
+          " — saved as “"+name+"”. The app’s copy of the log is updated too.");
+  }catch(e){ alert("Could not build the Excel file: "+e); }
 }
 
 /* ── Init ──────────────────────────────────────────────────────────── */
@@ -2028,8 +2939,11 @@ function togglePaste(){
   const d = new Date();
   document.getElementById("inDate").value =
     d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
-  document.getElementById("inTeachers").addEventListener("keydown", e=>{ if(e.key==="Enter") run(); });
-  document.getElementById("inExclude").addEventListener("keydown", e=>{ if(e.key==="Enter") run(); });
+  ["inTeachers","inExclude"].forEach(id=>document.getElementById(id).addEventListener("keydown", e=>{ if(e.key==="Enter") run(); }));
+  ["inTeachers","inDate","inDateTo"].forEach(id=>document.getElementById(id).addEventListener("change", ()=>{
+    if(document.getElementById("inPart").checked && window._partKey !== partInputsKey())
+      document.getElementById("partBox").innerHTML = '<div class="rowmeta">Teacher or date changed — click <b>Load lessons</b> again.</div>';
+  }));
 })();
 </script>
 </body>
