@@ -134,6 +134,17 @@
   td.fixc input{width:15px;height:15px;accent-color:var(--gold);cursor:pointer;}
   tr.fixedrow td{background:#fffbea!important;}
   .banner.info{background:#eef4fb;border-color:#c7d8ee;color:var(--navy-2);}
+  .logbtns{margin-top:7px;display:flex;gap:6px;}
+  .logtabs{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
+  .logtab{background:#f2f5f9;color:var(--navy);border:1px solid var(--line);border-radius:99px;
+          padding:5px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;}
+  .logtab.on{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .logtabs .sp{flex:1;}
+  .logtabs input{border:1px solid #c2cddb;border-radius:8px;padding:6px 10px;font-size:12.5px;width:170px;font-family:inherit;}
+  td.num{text-align:right;font-variant-numeric:tabular-nums;}
+  td.pos{color:var(--err);font-weight:800;} td.neg{color:var(--ok);font-weight:700;}
+  tr.newrow td{background:#fffbea!important;}
+  .logwrap{max-height:460px;overflow:auto;}
 
   .copybar{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-top:11px;}
   textarea.tsv{width:100%;height:120px;margin-top:10px;font-family:ui-monospace,Menlo,Consolas,monospace;
@@ -216,10 +227,14 @@
         <button class="btn btn-del" onclick="delFile('cross')" disabled>Delete</button>
       </div>
       <div class="fslot" id="slot-log">
-        <h3>Substitution Log</h3><div class="req">Optional · the lesson substitution output (sheets "Combined" + "Balance"). Swaps in it count as booked; its Balance decides goodwill covers. <b>Add to log</b> keeps it up to date.</div>
+        <h3>Substitution Log</h3><div class="req">Optional · the lesson substitution output (sheets "Combined" + "Balance"). Swaps in it count as booked; its Balance decides goodwill covers. <b>Add to log</b> keeps it up to date here — download only when you want the file.</div>
         <div class="meta"><span class="none">No file uploaded</span></div>
         <button class="btn btn-up" onclick="pickFile('log')">Upload</button>
         <button class="btn btn-del" onclick="delFile('log')" disabled>Delete</button>
+        <div class="logbtns">
+          <button class="btn btn-ghost btn-log" onclick="showLog()" disabled>View log</button>
+          <button class="btn btn-ghost btn-log" onclick="downloadLog()" disabled>Download</button>
+        </div>
       </div>
     </div>
     <div class="hint">Files stay in this browser until you replace or delete them. Nothing is uploaded anywhere.</div>
@@ -348,23 +363,31 @@
             <li><b>📌 Fix + Re-plan</b>: a row you change by hand is fixed; tick 📌 on any other
                 row to keep it, then <b>Re-plan the rest</b> re-plans only the unfixed rows</li>
             <li><b>Slips (PDF)</b>: substitution + swap-back notices (goodwill = cover notice).
-                <b>Add to log (Excel)</b>: appends the rows at the first empty row of
-                Combined (Cover = 1 on goodwill rows) or starts a new 2627 log</li>
+                <b>Add to log</b>: appends the rows to the app’s copy of the log at the first
+                empty row of Combined (Cover = 1 on goodwill rows), or starts a new 2627 log —
+                nothing is downloaded. <b>View log</b> shows the Balance table, upcoming
+                swap-backs and the log rows; <b>Download</b> saves the Excel file when you want it</li>
           </ul>
         </div>
       </div>
     </details>
   </div>
 
+  <div id="logPanel"></div>
   <div id="results"></div>
   <footer>Runs entirely in your browser · no data leaves this computer</footer>
 </div>
 
 <script type="text/x-python" id="pycore">
 """
-St. Hilary's School — Lesson Swap engine (v23)
+St. Hilary's School — Lesson Swap engine (v24)
 Released: 25 Sep 2026
 Rules source: Lesson_Swap_Rules.md + confirmed manual-output feedback.
+
+v24 changes vs v23:
+  * "Add to log" no longer downloads: rows go into the app's stored copy of the log and
+    the new log panel shows the Balance table, upcoming swap-backs and the log rows.
+    "Download" saves the Excel file only when asked.
 
 v23 changes vs v22:
   * SUBSTITUTION LOG upload (Combined + Balance sheets). Swaps already in the log are
@@ -2012,6 +2035,71 @@ def export_log(rows_json, log_path=None, out_path="/out.xlsx"):
     return {"added": added, "first_row": last + 1, "sheet": ws.title}
 
 
+def log_view(log_path, today_str, limit=300):
+    """Everything the in-app log panel shows: the Balance table, swap-backs still to
+    come, and the Combined rows (newest first)."""
+    wb = openpyxl.load_workbook(log_path, data_only=True)
+    ws = wb["Combined"] if "Combined" in wb.sheetnames else wb.worksheets[0]
+    today = datetime.strptime(today_str, "%Y-%m-%d")
+
+    def s(v):
+        if v is None:
+            return ""
+        if isinstance(v, float) and v.is_integer():
+            v = int(v)
+        return str(v).strip()
+
+    rows, being, helped, seen = [], {}, {}, []
+    for r in ws.iter_rows(min_row=2, max_col=14, values_only=True):
+        r = list(r) + [None] * (14 - len(r))
+        d = _as_dt(r[0])
+        sick = _initials(r[2])
+        if d is None or not sick:
+            continue
+        cover = _initials(r[6]) or ""
+        rd = _as_dt(r[7])
+        gw = _is_one(r[13])
+        rows.append({"date": d.strftime("%d/%m/%Y"), "iso": d.strftime("%Y-%m-%d"),
+                     "day": DAY_NAMES.get(d.weekday(), d.strftime("%A")),
+                     "sick": sick, "cls": s(r[3]), "lesson": s(r[4]),
+                     "time": s(r[5]) or LESSON_TIMES.get(_lesson_row(r[4]), ""),
+                     "cover": cover,
+                     "swap_date": rd.strftime("%d/%m/%Y") if rd else "",
+                     "swap_iso": rd.strftime("%Y-%m-%d") if rd else "",
+                     "swap_day": DAY_NAMES.get(rd.weekday(), rd.strftime("%A")) if rd else "",
+                     "swap_cls": s(r[9]), "swap_lesson": s(r[10]),
+                     "swap_time": s(r[11]) or (LESSON_TIMES.get(_lesson_row(r[10]), "") if rd else ""),
+                     "remark": s(r[12]), "gw": gw})
+        for t in (sick, cover):
+            if t and t not in seen:
+                seen.append(t)
+        if gw:
+            being[sick] = being.get(sick, 0) + 1
+            if cover:
+                helped[cover] = helped.get(cover, 0) + 1
+    official, order = {}, []
+    if "Balance" in wb.sheetnames:
+        for r in wb["Balance"].iter_rows(min_row=2, max_col=5, values_only=True):
+            t = _initials(r[0]) if r and r[0] is not None else None
+            if not t:
+                continue
+            order.append(t)
+            if len(r) >= 5 and isinstance(r[4], (int, float)):
+                official[t] = r[4]
+    teachers = order + [t for t in seen if t not in order]
+    bal = []
+    for t in teachers:
+        b, h, o = being.get(t, 0), helped.get(t, 0), official.get(t, 0)
+        bal.append({"t": t, "being": b, "help": h, "official": o, "bal": b - h - o})
+    bal.sort(key=lambda x: (-x["bal"], x["t"]))
+    upcoming = sorted((x for x in rows if x["swap_iso"] and x["swap_iso"] >= today.strftime("%Y-%m-%d")),
+                      key=lambda x: (x["swap_iso"], x["swap_lesson"]))
+    recent = sorted(rows, key=lambda x: x["iso"], reverse=True)
+    return {"sheet": ws.title, "total": len(rows), "goodwill": sum(1 for x in rows if x["gw"]),
+            "balance": bal, "upcoming": upcoming, "rows": recent[:limit],
+            "more": max(0, len(recent) - limit)}
+
+
 # ── Entry point ──────────────────────────────────────────────────────────────
 MAX_RANGE_DAYS = 31
 
@@ -2268,10 +2356,12 @@ async function refreshSlot(key){
     slot.classList.add("loaded");
     meta.innerHTML = "<b>"+esc(rec.name)+"</b><br>"+(rec.size/1024).toFixed(0)+" KB · "+rec.date;
     delBtn.disabled = false; upBtn.textContent = "Replace";
+    slot.querySelectorAll(".btn-log").forEach(b=>{ b.disabled = false; });
   }else{
     slot.classList.remove("loaded");
     meta.innerHTML = '<span class="none">No file uploaded</span>';
     delBtn.disabled = true; upBtn.textContent = "Upload";
+    slot.querySelectorAll(".btn-log").forEach(b=>{ b.disabled = true; });
   }
 }
 function pickFile(key){
@@ -2540,7 +2630,7 @@ function render(r, meta){
          '<button class="btn btn-up" onclick="copyTSV(null,null,false)">Copy all rows for Excel</button>'+
          '<button class="btn btn-ghost" onclick="copyTSV(null,null,true)">Copy with headers</button>'+
          '<button class="btn btn-up" onclick="downloadSlips()">🧾 Slips (PDF)</button>'+
-         '<button class="btn btn-up" onclick="downloadExcel()">📒 Add to log (Excel)</button>'+
+         '<button class="btn btn-up" onclick="addToLog()">📒 Add to log</button>'+
          '<button class="btn btn-ghost" onclick="togglePaste()">Show paste box</button>'+
          '<button class="btn btn-ghost" onclick="window.print()">Print</button>'+
          '<span id="copyMsg" class="rowmeta"></span></div>'+
@@ -2901,10 +2991,17 @@ async function downloadSlips(){
   }
 }
 
-/* ── Add to the substitution log (Excel) ──────────────────────────────
-   Rows go to the first empty row of Combined, Cover = 1 on goodwill rows,
-   and any new teacher gets a Balance row. The app keeps the updated copy. */
-async function downloadExcel(){
+/* ── Substitution log: add, view, download ────────────────────────────
+   "Add to log" writes the rows into the app's own copy of the log (first
+   empty row of Combined, Cover = 1 on goodwill rows, Balance rows for new
+   teachers) — nothing is downloaded. "Download" saves the Excel file only
+   when asked. A web page can't write into your file on disk directly.   */
+const NEW_LOG_NAME = "2627 lesson substitution output.xlsx";
+function todayISO(){
+  const d = new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+async function addToLog(){
   const rows = allRows();
   if(!rows.length){ alert("Nothing to add."); return; }
   try{
@@ -2918,18 +3015,92 @@ async function downloadExcel(){
     }
     const res = py("export_log",[json, log ? "/log.xlsx" : null, "/out.xlsx"]);
     const bytes = pyodide.FS.readFile("/out.xlsx");
-    const name = log ? log.name : "2627 lesson substitution output.xlsx";
-    const blob = new Blob([bytes], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob); a.download = name;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
-    await idbPut("log",{name:name, size:bytes.length, date:new Date().toLocaleDateString(),
+    const name = log ? log.name : NEW_LOG_NAME;
+    await idbPut("log",{name:name, size:bytes.length, date:new Date().toLocaleDateString(), unsaved:true,
                         data:bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset+bytes.byteLength)});
-    refreshSlot("log");
-    flash("✓ "+res.added+" row"+(res.added===1?"":"s")+" added to "+res.sheet+" from row "+res.first_row+
-          " — saved as “"+name+"”. The app’s copy of the log is updated too.");
-  }catch(e){ alert("Could not build the Excel file: "+e); }
+    await refreshSlot("log");
+    const newKeys = rows.map(x=>x.date_iso+"|"+x.sick+"|"+x.lesson);
+    await showLog("rows", newKeys);
+    flash("✓ "+res.added+" row"+(res.added===1?"":"s")+" added to the app’s log (Combined, from row "+res.first_row+
+          "). Nothing downloaded — use Download when you want the Excel file.");
+  }catch(e){ alert("Could not add to the log: "+e); }
+}
+async function downloadLog(){
+  const log = await idbGet("log");
+  if(!log){ alert("No log stored yet — upload one, or use Add to log after a plan."); return; }
+  const blob = new Blob([log.data], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = log.name || NEW_LOG_NAME;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+  if(log.unsaved){ log.unsaved = false; await idbPut("log", log); }
+  const el = document.getElementById("logUnsaved"); if(el) el.style.display = "none";
+}
+let _logTab = "balance", _logData = null, _logNew = [];
+async function showLog(tab, newKeys){
+  const log = await idbGet("log");
+  const box = document.getElementById("logPanel");
+  if(!log){ box.innerHTML = ""; alert("No log stored yet — upload one, or use Add to log after a plan."); return; }
+  if(tab) _logTab = tab;
+  if(newKeys) _logNew = newKeys;
+  box.innerHTML = '<div class="card"><h2><span class="n">📒</span>Substitution log</h2><div class="rowmeta">⏳ Reading the log…</div></div>';
+  try{
+    await ensureEngine();
+    pyodide.FS.writeFile("/logview.xlsx", new Uint8Array(log.data));
+    _logData = py("log_view",["/logview.xlsx", todayISO()]);
+  }catch(e){
+    box.innerHTML = '<div class="card"><div class="banner err">Could not read the log: '+esc(String(e))+'</div></div>'; return;
+  }
+  _logData.name = log.name; _logData.unsaved = !!log.unsaved;
+  drawLog();
+  box.scrollIntoView({behavior:"smooth", block:"start"});
+}
+function setLogTab(t){ _logTab = t; drawLog(); }
+function drawLog(){
+  const v = _logData, box = document.getElementById("logPanel"); if(!v) return;
+  const tabs = [["balance","Balance ("+v.balance.length+")"],["upcoming","Upcoming swap-backs ("+v.upcoming.length+")"],["rows","Log rows ("+v.total+")"]];
+  let h = '<div class="card"><h2><span class="n">📒</span>Substitution log — '+esc(v.name)+'</h2>';
+  h += '<div class="banner warn" id="logUnsaved" style="display:'+(v.unsaved?'block':'none')+'">The app’s log has rows your Excel file doesn’t have yet — click <b>Download</b> when you want to save it.</div>';
+  h += '<div class="logtabs">'+tabs.map(t=>'<button class="logtab'+(t[0]===_logTab?' on':'')+'" onclick="setLogTab(\''+t[0]+'\')">'+esc(t[1])+'</button>').join("");
+  h += '<span class="sp"></span>';
+  if(_logTab!=="balance") h += '<input id="logFilter" placeholder="Filter by teacher or class" oninput="filterLog()">';
+  h += '<button class="btn btn-ghost" onclick="downloadLog()">⬇ Download</button>'+
+       '<button class="btn btn-ghost" onclick="document.getElementById(\'logPanel\').innerHTML=\'\'">Close</button></div>';
+  h += '<div class="tablewrap logwrap"><table>';
+  if(_logTab==="balance"){
+    h += '<thead><tr><th>Teacher</th><th>Being covered</th><th>Help covered</th><th>Official</th><th>Balance</th></tr></thead><tbody>';
+    v.balance.forEach(b=>{
+      const cls = b.bal>0 ? "num pos" : (b.bal<0 ? "num neg" : "num");
+      h += '<tr><td><b>'+esc(b.t)+'</b></td><td class="num">'+b.being+'</td><td class="num">'+b.help+'</td><td class="num">'+b.official+'</td><td class="'+cls+'">'+(b.bal>0?"+":"")+b.bal+'</td></tr>';
+    });
+    h += '</tbody></table></div><div class="rowmeta">Balance = being covered − help covered − official (goodwill rows = Cover 1). '+
+         '<b style="color:var(--err)">+</b> = owes goodwill → asked first for the next goodwill cover.</div>';
+  }else{
+    const list = _logTab==="upcoming" ? v.upcoming : v.rows;
+    if(_logTab==="upcoming"){
+      h += '<thead><tr><th>Swap date</th><th>Day</th><th>Swaps back</th><th>Class</th><th>Lesson</th><th>Time</th><th>For</th><th>Covered on</th></tr></thead><tbody>';
+      list.forEach(x=>{
+        h += '<tr data-f="'+esc((x.sick+" "+x.cover+" "+x.swap_cls+" "+x.cls).toUpperCase())+'"><td class="mono">'+esc(x.swap_date)+'</td><td>'+esc(x.swap_day)+'</td><td><b>'+esc(x.sick)+'</b></td><td>'+esc(x.swap_cls)+'</td><td>'+esc(x.swap_lesson)+'</td><td class="mono">'+esc(x.swap_time)+'</td><td>'+esc(x.cover)+'</td><td class="mono">'+esc(x.date)+'</td></tr>';
+      });
+      if(!list.length) h += '<tr><td colspan="8" class="rowmeta">No swap-backs due from today.</td></tr>';
+    }else{
+      h += '<thead><tr><th>Date</th><th>Day</th><th>Subject Teacher</th><th>Class</th><th>Lesson</th><th>Substitute</th><th>Swap Date</th><th>Class</th><th>Swap Lesson</th><th>Remark</th></tr></thead><tbody>';
+      list.forEach(x=>{
+        const isNew = _logNew.indexOf(x.iso+"|"+x.sick+"|"+x.lesson)>=0;
+        h += '<tr'+(isNew?' class="newrow"':'')+' data-f="'+esc((x.sick+" "+x.cover+" "+x.cls+" "+x.swap_cls).toUpperCase())+'"><td class="mono">'+esc(x.date)+'</td><td>'+esc(x.day)+'</td><td><b>'+esc(x.sick)+'</b></td><td>'+esc(x.cls)+'</td><td>'+esc(x.lesson)+'</td><td>'+esc(x.cover||"—")+'</td><td class="mono">'+esc(x.swap_date||"—")+'</td><td>'+esc(x.swap_cls)+'</td><td>'+esc(x.swap_lesson)+'</td><td class="rem">'+(x.gw?'<span class="tag gw">GOODWILL</span>':'')+esc(x.remark)+'</td></tr>';
+      });
+    }
+    h += '</tbody></table></div>';
+    if(_logTab==="rows") h += '<div class="rowmeta">Newest first'+(v.more?' · showing the latest '+v.rows.length+' of '+v.total:'')+(_logNew.length?' · rows just added are highlighted':'')+'.</div>';
+  }
+  h += '</div>';
+  box.innerHTML = h;
+}
+function filterLog(){
+  const q = (document.getElementById("logFilter").value||"").trim().toUpperCase();
+  document.querySelectorAll("#logPanel tbody tr[data-f]").forEach(tr=>{
+    tr.style.display = (!q || tr.dataset.f.split(" ").some(w=>w.indexOf(q)===0)) ? "" : "none";
+  });
 }
 
 /* ── Init ──────────────────────────────────────────────────────────── */
