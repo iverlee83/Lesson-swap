@@ -145,6 +145,9 @@
   td.pos{color:var(--err);font-weight:800;} td.neg{color:var(--ok);font-weight:700;}
   tr.newrow td{background:#fffbea!important;}
   .logwrap{max-height:460px;overflow:auto;}
+  .tidybox{border:1px solid #e8d09a;background:#fffdf5;border-radius:10px;padding:11px 13px;margin-bottom:12px;font-size:12.5px;}
+  .tidybox input[type=date]{border:1px solid #c2cddb;border-radius:7px;padding:4px 8px;font-family:inherit;font-size:12.5px;}
+  .tidybox .banner{margin-top:10px;}
 
   .copybar{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-top:11px;}
   textarea.tsv{width:100%;height:120px;margin-top:10px;font-family:ui-monospace,Menlo,Consolas,monospace;
@@ -366,7 +369,9 @@
                 <b>Add to log</b>: appends the rows to the app’s copy of the log at the first
                 empty row of Combined (Cover = 1 on goodwill rows), or starts a new 2627 log —
                 nothing is downloaded. <b>View log</b> shows the Balance table, upcoming
-                swap-backs and the log rows; <b>Download</b> saves the Excel file when you want it</li>
+                swap-backs and the log rows; <b>Download</b> saves the Excel file when you want it.
+                <b>Tidy old swaps</b> deletes swaps fully finished before a cutoff (default 2
+                months ago) — balances stay the same, and it can be undone</li>
           </ul>
         </div>
       </div>
@@ -380,9 +385,14 @@
 
 <script type="text/x-python" id="pycore">
 """
-St. Hilary's School — Lesson Swap engine (v24)
+St. Hilary's School — Lesson Swap engine (v25)
 Released: 25 Sep 2026
 Rules source: Lesson_Swap_Rules.md + confirmed manual-output feedback.
+
+v25 changes vs v24:
+  * "Tidy old swaps" in the log panel: deletes swaps whose cover date AND swap-back date
+    are both before a cutoff (default 2 months ago, adjustable), after a preview. Removed
+    goodwill is folded into Official so every Balance stays the same. One-step Undo.
 
 v24 changes vs v23:
   * "Add to log" no longer downloads: rows go into the app's stored copy of the log and
@@ -2035,6 +2045,130 @@ def export_log(rows_json, log_path=None, out_path="/out.xlsx"):
     return {"added": added, "first_row": last + 1, "sheet": ws.title}
 
 
+def _tidy_scan(ws, cutoff):
+    """Data rows of Combined that are fully in the past: cover date AND swap-back date
+    (if any) before `cutoff`. Returns (all_data_row_numbers, old_row_numbers)."""
+    data, old = [], []
+    for r in ws.iter_rows(min_row=2, max_col=14):
+        d = _as_dt(r[0].value)
+        if d is None or not _initials(r[2].value):
+            continue
+        data.append(r[0].row)
+        rd = _as_dt(r[7].value)
+        if d < cutoff and (rd is None or rd < cutoff):
+            old.append(r[0].row)
+    return data, old
+
+
+def _official_adjust(ws, rows):
+    """How Official must change so every Balance stays the same once these goodwill
+    rows are gone: the subject teacher loses a 'being covered' (-1 on Official keeps
+    the balance), the substitute loses a 'help covered' (+1)."""
+    adj = {}
+    for n in rows:
+        if not _is_one(ws.cell(n, 14).value):
+            continue
+        sick, cover = _initials(ws.cell(n, 3).value), _initials(ws.cell(n, 7).value)
+        if sick:
+            adj[sick] = adj.get(sick, 0) - 1
+        if cover:
+            adj[cover] = adj.get(cover, 0) + 1
+    return {t: v for t, v in adj.items() if v}
+
+
+def tidy_preview(log_path, cutoff_str):
+    """What 'Tidy old swaps' would remove, and how Official would be adjusted."""
+    cutoff = datetime.strptime(cutoff_str, "%Y-%m-%d")
+    wb = openpyxl.load_workbook(log_path, data_only=True)
+    ws = wb["Combined"] if "Combined" in wb.sheetnames else wb.worksheets[0]
+    data, old = _tidy_scan(ws, cutoff)
+    rows = []
+    for n in old:
+        g = lambda c: ws.cell(n, c).value
+        d, rd = _as_dt(g(1)), _as_dt(g(8))
+        rows.append({"date": d.strftime("%d/%m/%Y"), "sick": _initials(g(3)), "cls": str(g(4) or ""),
+                     "lesson": str(g(5) if g(5) is not None else ""), "cover": _initials(g(7)) or "",
+                     "swap_date": rd.strftime("%d/%m/%Y") if rd else "", "gw": _is_one(g(14))})
+    adj = _official_adjust(ws, old)
+    return {"remove": len(old), "keep": len(data) - len(old), "rows": rows,
+            "adjust": ["%s %s%d" % (t, "+" if v > 0 else "", v) for t, v in sorted(adj.items())]}
+
+
+def _plain_row(ws, n):
+    """Row n's A-N as plain values. Day/Time formulas become text, so moving the row
+    can never leave a formula pointing at the wrong line."""
+    vals = [ws.cell(n, c).value for c in range(1, 15)]
+    d, rd = _as_dt(vals[0]), _as_dt(vals[7])
+
+    def is_f(v):
+        return isinstance(v, str) and v.startswith("=")
+    if is_f(vals[1]):
+        vals[1] = DAY_NAMES.get(d.weekday(), d.strftime("%A")) if d else None
+    if is_f(vals[5]):
+        vals[5] = LESSON_TIMES.get(_lesson_row(vals[4]), None)
+    if is_f(vals[8]):
+        vals[8] = (DAY_NAMES.get(rd.weekday(), rd.strftime("%A")) if rd else "/")
+    if is_f(vals[11]):
+        vals[11] = (LESSON_TIMES.get(_lesson_row(vals[10]), None) if rd else "/")
+    return vals
+
+
+def tidy_log(log_path, cutoff_str, out_path="/out.xlsx"):
+    """Delete swaps that are completely in the past (cover date and swap-back date both
+    before the cutoff) and fold their goodwill counts into Official, so no teacher's
+    Balance changes. Other rows are packed up in their original order; any non-swap
+    blocks in the sheet (e.g. lookup tables) stay exactly where they are."""
+    cutoff = datetime.strptime(cutoff_str, "%Y-%m-%d")
+    wb = openpyxl.load_workbook(log_path)
+    ws = wb["Combined"] if "Combined" in wb.sheetnames else wb.worksheets[0]
+    data, old = _tidy_scan(ws, cutoff)
+    if not old:
+        return {"removed": 0, "kept": len(data), "adjust": []}
+    # Formula cells return formulas here; the dates we compare are values either way.
+    adj = _official_adjust(ws, old)
+    old_set = set(old)
+    keep_vals = [_plain_row(ws, n) for n in data if n not in old_set]
+    fmt = {c: ws.cell(data[0], c).number_format for c in (1, 8)}
+    for i, n in enumerate(data):                 # refill the data slots in order
+        vals = keep_vals[i] if i < len(keep_vals) else [None] * 14
+        for c, v in enumerate(vals, 1):
+            cell = ws.cell(n, c)
+            cell.value = v
+            if c in (1, 8) and v is not None:
+                cell.number_format = fmt[c] if fmt[c] and fmt[c] != "General" else "dd/mm/yyyy"
+    # Official (Balance column E) absorbs the removed goodwill so balances hold.
+    if adj:
+        from openpyxl.styles import Font
+        if "Balance" in wb.sheetnames:
+            bs = wb["Balance"]
+        else:
+            bs = wb.create_sheet("Balance")
+            for i, h in enumerate([None, "Being covered", "Help covered", "Balance", "Official"], 1):
+                if h:
+                    bs.cell(1, i, h).font = Font(bold=True)
+        where = {}
+        for c in bs["A"]:
+            t = _initials(c.value) if c.row > 1 else None
+            if t and t not in where:
+                where[t] = c.row
+        b_last = max([c.row for c in bs["A"] if c.value not in (None, "")] + [1])
+        for t, v in adj.items():
+            n = where.get(t)
+            if n is None:
+                b_last += 1
+                n = b_last
+                bs.cell(n, 1, t)
+                bs.cell(n, 2, "=SUMPRODUCT(COUNTIFS(Combined!C:C, $A%d, Combined!N:N, 1))" % n)
+                bs.cell(n, 3, "=SUMPRODUCT(COUNTIFS(Combined!G:G, $A%d, Combined!N:N, 1))" % n)
+                bs.cell(n, 4, "=B%d-C%d-E%d" % (n, n, n))
+            cur = bs.cell(n, 5).value
+            cur = cur if isinstance(cur, (int, float)) else 0
+            bs.cell(n, 5, (cur + v) or None)
+    wb.save(out_path)
+    return {"removed": len(old), "kept": len(keep_vals),
+            "adjust": ["%s %s%d" % (t, "+" if v > 0 else "", v) for t, v in sorted(adj.items())]}
+
+
 def log_view(log_path, today_str, limit=300):
     """Everything the in-app log panel shows: the Balance table, swap-backs still to
     come, and the Combined rows (newest first)."""
@@ -2371,6 +2505,7 @@ function pickFile(key){
     const f = inp.files[0]; if(!f) return;
     const buf = await f.arrayBuffer();
     await idbPut(key,{name:f.name,size:f.size,date:new Date().toLocaleDateString(),data:buf});
+    if(key==="log") await idbDel("log_prev");      // a fresh upload ends any Tidy undo
     refreshSlot(key);
   };
   inp.click();
@@ -3016,6 +3151,7 @@ async function addToLog(){
     const res = py("export_log",[json, log ? "/log.xlsx" : null, "/out.xlsx"]);
     const bytes = pyodide.FS.readFile("/out.xlsx");
     const name = log ? log.name : NEW_LOG_NAME;
+    await idbDel("log_prev");
     await idbPut("log",{name:name, size:bytes.length, date:new Date().toLocaleDateString(), unsaved:true,
                         data:bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset+bytes.byteLength)});
     await refreshSlot("log");
@@ -3052,6 +3188,7 @@ async function showLog(tab, newKeys){
     box.innerHTML = '<div class="card"><div class="banner err">Could not read the log: '+esc(String(e))+'</div></div>'; return;
   }
   _logData.name = log.name; _logData.unsaved = !!log.unsaved;
+  _logData.canUndo = !!(await idbGet("log_prev"));
   drawLog();
   box.scrollIntoView({behavior:"smooth", block:"start"});
 }
@@ -3061,11 +3198,21 @@ function drawLog(){
   const tabs = [["balance","Balance ("+v.balance.length+")"],["upcoming","Upcoming swap-backs ("+v.upcoming.length+")"],["rows","Log rows ("+v.total+")"]];
   let h = '<div class="card"><h2><span class="n">📒</span>Substitution log — '+esc(v.name)+'</h2>';
   h += '<div class="banner warn" id="logUnsaved" style="display:'+(v.unsaved?'block':'none')+'">The app’s log has rows your Excel file doesn’t have yet — click <b>Download</b> when you want to save it.</div>';
+  if(v.canUndo) h += '<div class="banner info">🧹 Old swaps were tidied. <button class="btn btn-ghost btn-xs" onclick="tidyUndo()">↶ Undo tidy</button></div>';
   h += '<div class="logtabs">'+tabs.map(t=>'<button class="logtab'+(t[0]===_logTab?' on':'')+'" onclick="setLogTab(\''+t[0]+'\')">'+esc(t[1])+'</button>').join("");
   h += '<span class="sp"></span>';
   if(_logTab!=="balance") h += '<input id="logFilter" placeholder="Filter by teacher or class" oninput="filterLog()">';
-  h += '<button class="btn btn-ghost" onclick="downloadLog()">⬇ Download</button>'+
+  h += '<button class="btn btn-ghost" onclick="toggleTidy()">🧹 Tidy old swaps</button>'+
+       '<button class="btn btn-ghost" onclick="downloadLog()">⬇ Download</button>'+
        '<button class="btn btn-ghost" onclick="document.getElementById(\'logPanel\').innerHTML=\'\'">Close</button></div>';
+  if(_tidyOpen){
+    h += '<div class="tidybox"><b>🧹 Delete old swaps</b> — removes swaps whose cover date <i>and</i> swap-back date are both before '+
+         '<input type="date" id="tidyCut" value="'+esc(_tidyCut||defaultCutoff())+'" onchange="_tidyCut=this.value;document.getElementById(\'tidyRes\').innerHTML=\'\'"> '+
+         '<button class="btn btn-up btn-xs" onclick="tidyPreview()">Preview</button>'+
+         '<div class="rowmeta">Swaps with a swap-back still to come are never touched. Each teacher’s <b>Balance stays the same</b> — '+
+         'removed goodwill is added into the Official column. Changes stay in the app until you Download.</div>'+
+         '<div id="tidyRes"></div></div>';
+  }
   h += '<div class="tablewrap logwrap"><table>';
   if(_logTab==="balance"){
     h += '<thead><tr><th>Teacher</th><th>Being covered</th><th>Help covered</th><th>Official</th><th>Balance</th></tr></thead><tbody>';
@@ -3095,6 +3242,54 @@ function drawLog(){
   }
   h += '</div>';
   box.innerHTML = h;
+}
+let _tidyOpen = false, _tidyCut = "";
+function defaultCutoff(){
+  const d = new Date(); d.setMonth(d.getMonth()-2);
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function toggleTidy(){ _tidyOpen = !_tidyOpen; if(_tidyOpen && !_tidyCut) _tidyCut = defaultCutoff(); drawLog(); }
+async function tidyPreview(){
+  const cut = document.getElementById("tidyCut").value; _tidyCut = cut;
+  const box = document.getElementById("tidyRes");
+  if(!cut){ box.innerHTML = '<div class="rowmeta">Pick a date first.</div>'; return; }
+  const log = await idbGet("log"); if(!log) return;
+  pyodide.FS.writeFile("/tidy.xlsx", new Uint8Array(log.data));
+  let p;
+  try{ p = py("tidy_preview",["/tidy.xlsx", cut]); }
+  catch(e){ box.innerHTML = '<div class="banner err">Could not read the log: '+esc(String(e))+'</div>'; return; }
+  if(!p.remove){ box.innerHTML = '<div class="banner ok">Nothing to delete — no swaps are fully finished before '+esc(cut.split("-").reverse().join("/"))+'.</div>'; return; }
+  let h = '<div class="banner warn"><b>'+p.remove+'</b> swap'+(p.remove===1?'':'s')+' will be deleted · '+p.keep+' kept.'+
+          (p.adjust.length ? ' Official adjusted to keep balances: <b>'+esc(p.adjust.join(", "))+'</b>.' : ' No goodwill rows among them, so Official is unchanged.')+
+          ' <button class="btn btn-del btn-xs" onclick="tidyConfirm()">Delete '+p.remove+' swap'+(p.remove===1?'':'s')+'</button></div>';
+  h += '<div class="tablewrap" style="max-height:240px;overflow:auto"><table><thead><tr><th>Date</th><th>Subject Teacher</th><th>Class</th><th>Lesson</th><th>Substitute</th><th>Swap Date</th><th></th></tr></thead><tbody>';
+  p.rows.forEach(x=>{ h += '<tr><td class="mono">'+esc(x.date)+'</td><td><b>'+esc(x.sick)+'</b></td><td>'+esc(x.cls)+'</td><td>'+esc(x.lesson)+'</td><td>'+esc(x.cover||"—")+'</td><td class="mono">'+esc(x.swap_date||"—")+'</td><td>'+(x.gw?'<span class="tag gw">GOODWILL</span>':'')+'</td></tr>'; });
+  h += '</tbody></table></div>';
+  box.innerHTML = h;
+}
+async function tidyConfirm(){
+  const cut = _tidyCut;
+  const log = await idbGet("log"); if(!log || !cut) return;
+  if(!confirm("Delete the swaps finished before "+cut.split("-").reverse().join("/")+" from the app’s log?\n\nBalances stay the same. You can Undo until you add to or replace the log.")) return;
+  try{
+    pyodide.FS.writeFile("/tidy.xlsx", new Uint8Array(log.data));
+    const res = py("tidy_log",["/tidy.xlsx", cut, "/tidied.xlsx"]);
+    const bytes = pyodide.FS.readFile("/tidied.xlsx");
+    await idbPut("log_prev", log);
+    await idbPut("log",{name:log.name, size:bytes.length, date:new Date().toLocaleDateString(), unsaved:true,
+                        data:bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset+bytes.byteLength)});
+    await refreshSlot("log");
+    _tidyOpen = false;
+    await showLog("rows", []);
+    flash("🧹 "+res.removed+" old swap"+(res.removed===1?"":"s")+" deleted — "+res.kept+" left. Balances unchanged.");
+  }catch(e){ alert("Could not tidy the log: "+e); }
+}
+async function tidyUndo(){
+  const prev = await idbGet("log_prev"); if(!prev) return;
+  await idbPut("log", prev); await idbDel("log_prev");
+  await refreshSlot("log");
+  await showLog("rows", []);
+  flash("↶ Tidy undone — the log is back as it was.");
 }
 function filterLog(){
   const q = (document.getElementById("logFilter").value||"").trim().toUpperCase();
